@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+      setLoading(true);
       if (authUser) {
         setUser(authUser);
         
@@ -21,11 +22,15 @@ export function AuthProvider({ children }) {
           if (docSnap.exists()) {
             setProfile(docSnap.data());
           } else {
+            // Profile doesn't exist yet, set empty profile but don't error
             setProfile(null);
           }
           setLoading(false);
         }, (error) => {
-          console.error("Error fetching profile:", error);
+          console.warn("Error fetching profile:", error);
+          // Set profile to null but keep user logged in
+          // This prevents infinite loops on permission errors
+          setProfile(null);
           setLoading(false);
         });
 

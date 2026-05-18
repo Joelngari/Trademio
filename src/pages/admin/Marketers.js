@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/firebase.js';
 import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, setDoc } from 'firebase/firestore';
+import { auth } from '../../lib/firebase.js';
 import { formatKSh } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
 import { Users, Shield, ShieldOff, Search, Eye, Plus } from 'lucide-react';
@@ -23,6 +24,49 @@ export default function AdminMarketers() {
     t.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     t.username.toLowerCase().includes(searchTerm.toLowerCase())
   );
+  async function handleAddMarketer() {
+    try {
+      const fullName = window.prompt('Full name for marketer');
+      if (!fullName) return;
+      const username = window.prompt('Username (no spaces)');
+      if (!username) return;
+      const email = window.prompt('Email');
+      if (!email) return;
+      const password = window.prompt('Temporary password (min 6 chars)');
+      if (!password) return;
+      const phoneNumber = window.prompt('Phone number (optional)');
+
+      const token = await auth.currentUser.getIdToken();
+      const res = await fetch('/api/admin/marketer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ fullName, username, email, password, phoneNumber })
+      });
+
+      // Handle possible empty or non-JSON responses gracefully
+      const text = await res.text();
+      let data = {};
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          // Not JSON - keep raw text
+          data = { message: text };
+        }
+      }
+
+      if (!res.ok) {
+        throw new Error(data.message || `Request failed with status ${res.status}`);
+      }
+
+      alert(data.message || 'Marketer created successfully');
+    } catch (err) {
+      alert('Error: ' + (err.message || err));
+    }
+  }
 
   if (loading) return <SkeletonLoader type="table" />;
 
@@ -44,9 +88,9 @@ export default function AdminMarketers() {
                 className="bg-[#121212] border border-white/5 rounded-xl pl-12 pr-6 py-3 text-white focus:border-[#87ceeb] outline-none transition-all w-full md:w-64"
               />
            </div>
-           <button className="bg-[#87ceeb] text-[#0a0a0a] px-6 py-3 rounded-xl font-bold hover:bg-[#76b9d6] transition-all flex items-center gap-2">
-              <Plus size={18} />
-              Add Marketer
+           <button onClick={() => handleAddMarketer()} className="bg-[#87ceeb] text-[#0a0a0a] px-6 py-3 rounded-xl font-bold hover:bg-[#76b9d6] transition-all flex items-center gap-2">
+             <Plus size={18} />
+             Add Marketer
            </button>
         </div>
       </div>

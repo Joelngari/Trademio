@@ -409,6 +409,59 @@ app.get('/api/admin/dashboard', authMiddleware, roleMiddleware(['admin']), async
    }
 });
 
+// Create marketer (admin only)
+app.post('/api/admin/marketer', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { fullName, email, username, password, phoneNumber } = req.body;
+    if (!fullName || !email || !username || !password) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    const normalizedUsername = username.toLowerCase();
+    const usernameQuery = await adminDb.collection('users').where('username', '==', normalizedUsername).get();
+    if (!usernameQuery.empty) return res.status(400).json({ message: 'Username already taken' });
+
+    // Create Firebase Auth user
+    const userRecord = await adminAuth.createUser({
+      email,
+      password,
+      displayName: fullName,
+      phoneNumber
+    });
+
+    // Create user and marketer docs
+    const batch = adminDb.batch();
+    const userRef = adminDb.collection('users').doc(userRecord.uid);
+    batch.set(userRef, {
+      uid: userRecord.uid,
+      name: fullName,
+      username: normalizedUsername,
+      email,
+      phoneNumber: phoneNumber || null,
+      role: 'marketer',
+      status: 'active',
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    const marketerRef = adminDb.collection('marketers').doc(userRecord.uid);
+    batch.set(marketerRef, {
+      uid: userRecord.uid,
+      referralCode: normalizedUsername.toUpperCase(),
+      commissionBalance: 0,
+      totalEarned: 0,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    await batch.commit();
+    invalidateCache('users', 'marketers');
+
+    res.json({ message: 'Marketer created successfully', uid: userRecord.uid });
+  } catch (error) {
+    console.error('Create marketer error:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
 // --- CRON JOB (Session Completion) ---
 
 cron.schedule('* * * * *', async () => {
@@ -507,6 +560,55 @@ async function seedDatabase() {
       batch.set(ref, { ...p, id: ref.id });
     });
     await batch.commit();
+  }
+
+  await seedAdminUser();
+}
+
+async function seedAdminUser() {
+  const adminEmail = 'joelgitonga79@gmail.com';
+  const adminPassword = 'Joelngari@2023^';
+  const adminUsername = 'adminjoel';
+  const adminPhoneNumber = '0113623027';
+  const adminFullName = 'Admin Joel';
+
+  let userRecord;
+  try {
+    userRecord = await adminAuth.getUserByEmail(adminEmail);
+    await adminAuth.updateUser(userRecord.uid, {
+      password: adminPassword,
+      displayName: adminFullName
+    });
+  } catch (err) {
+    if (err.code === 'auth/user-not-found' || err.code === 'auth/user-not-found') {
+      userRecord = await adminAuth.createUser({
+        email: adminEmail,
+        password: adminPassword,
+        displayName: adminFullName
+      });
+    } else {
+      throw err;
+    }
+  }
+
+  const userRef = adminDb.collection('users').doc(userRecord.uid);
+  const userDoc = await userRef.get();
+  const adminData = {
+    uid: userRecord.uid,
+    name: adminFullName,
+    username: adminUsername,
+    email: adminEmail,
+    phoneNumber: adminPhoneNumber,
+    role: 'admin',
+    status: 'active',
+    preferredCurrency: 'KES',
+    createdAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+
+  if (!userDoc.exists) {
+    await userRef.set(adminData);
+  } else {
+    await userRef.set(adminData, { merge: true });
   }
 }
 

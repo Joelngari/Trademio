@@ -50,7 +50,7 @@ function DashboardLayout({ children }) {
   return (
     <div className="flex min-h-screen bg-[#0a0a0a]">
       <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 md:pl-64">
         {isTrader && <TickerTape />}
         <TopBar setIsOpen={setIsSidebarOpen} />
         <main className="flex-1 p-4 md:p-8 overflow-y-auto">
