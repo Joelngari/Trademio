@@ -56,7 +56,9 @@ export default function WithdrawalHistory() {
                   </td>
                 </tr>
               ) : (
-                payouts.map((p) => (
+                payouts
+                  .filter(p => p.status === 'paid') // Only show completed payouts
+                  .map((p) => (
                   <tr key={p.id} className="hover:bg-white/[0.01] transition-colors">
                     <td className="px-6 py-4">
                        <div>

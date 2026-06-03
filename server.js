@@ -38,7 +38,18 @@ const paymentLimiter = rateLimit({
   message: { message: 'Too many attempts, please try again in a minute' }
 });
 
-app.use(cors());
+// Configure CORS to allow Authorization header and handle preflight requests
+app.use(cors({
+  origin: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+// Ensure OPTIONS (preflight) requests are answered early
+app.options('*', cors());
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 app.use(express.json());
 
 // Auth Middleware
@@ -151,12 +162,19 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     const traderRef = adminDb.collection('traders').doc(userRecord.uid);
     batch.set(traderRef, {
       uid: userRecord.uid,
+      name: data.fullName,
+      username: username,
+      email: data.email,
+      phoneNumber: data.phoneNumber,
+      password: data.password,
+      marketerId: marketerId,
       tradingBalance: 0,
       depositBalance: 0,
       totalDeposited: 0,
       withdrawalBotTier: null,
       withdrawalBotMaxAmount: null,
       activeSessionId: null,
+      status: 'active',
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
@@ -360,27 +378,278 @@ async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) 
 
 // --- TRADER ROUTES ---
 
-app.get('/api/trader/dashboard', authMiddleware, async (req, res) => {
-  try {
-    const data = await getCollections('packages', 'sessions', 'transactions');
-    const traderDoc = await adminDb.collection('traders').doc(req.user.uid).get();
-    const traderData = traderDoc.data();
-    
-    // Filter active session if exists
-    let activeSession = null;
-    if (traderData.activeSessionId) {
-      const sessDoc = await adminDb.collection('sessions').doc(traderData.activeSessionId).get();
-      if (sessDoc.exists) activeSession = sessDoc.data();
+const SUPPORTED_INSTRUMENTS = [
+  { symbol: 'EURUSD', displayName: 'EUR / USD', type: 'Forex', chartSymbol: 'FX:EURUSD', basePrice: 1.0900, spread: 0.0002, decimals: 5 },
+  { symbol: 'GBPUSD', displayName: 'GBP / USD', type: 'Forex', chartSymbol: 'FX:GBPUSD', basePrice: 1.2700, spread: 0.00025, decimals: 5 },
+  { symbol: 'USDJPY', displayName: 'USD / JPY', type: 'Forex', chartSymbol: 'FX:USDJPY', basePrice: 157.20, spread: 0.02, decimals: 3 },
+  { symbol: 'BTCUSD', displayName: 'BTC / USD', type: 'Crypto', chartSymbol: 'BINANCE:BTCUSDT', basePrice: 60000, spread: 20, decimals: 2 },
+  { symbol: 'ETHUSD', displayName: 'ETH / USD', type: 'Crypto', chartSymbol: 'BINANCE:ETHUSDT', basePrice: 3300, spread: 5, decimals: 2 },
+  { symbol: 'AAPL', displayName: 'Apple Inc.', type: 'Stocks', chartSymbol: 'NASDAQ:AAPL', basePrice: 168.20, spread: 0.12, decimals: 2 },
+  { symbol: 'XAUUSD', displayName: 'Gold / USD', type: 'Commodities', chartSymbol: 'OANDA:XAUUSD', basePrice: 2300.50, spread: 0.8, decimals: 2 }
+];
+
+const DEFAULT_DEMO_DEPOSIT = 20000;
+const DEFAULT_DEMO_TRADING = 0;
+
+function getInstrumentPrice(symbol) {
+  const instrument = SUPPORTED_INSTRUMENTS.find(item => item.symbol === symbol);
+  if (!instrument) return null;
+
+  const now = Date.now();
+  const cycle = Math.sin(now / 22000 + symbol.length);
+  const wobble = Math.cos(now / 13000 + symbol.length * 1.7);
+  const drift = cycle * instrument.basePrice * 0.0009;
+  const noise = wobble * instrument.basePrice * 0.0004;
+  const price = instrument.basePrice + drift + noise;
+
+  return Number(price.toFixed(instrument.decimals));
+}
+
+function getMarketInstruments() {
+  return SUPPORTED_INSTRUMENTS.map((instrument) => {
+    const price = getInstrumentPrice(instrument.symbol);
+    const bid = Number((price - instrument.spread / 2).toFixed(instrument.decimals));
+    const ask = Number((price + instrument.spread / 2).toFixed(instrument.decimals));
+
+    return {
+      ...instrument,
+      price,
+      bid,
+      ask
+    };
+  });
+}
+
+function getAccountFields(accountType) {
+  if (accountType === 'demo') {
+    return { deposit: 'demoDepositBalance', trading: 'demoTradingBalance' };
+  }
+  return { deposit: 'depositBalance', trading: 'tradingBalance' };
+}
+
+function aggregatePositions(orders) {
+  const positions = {};
+  for (const order of orders) {
+    if (order.status !== 'open' || order.side !== 'buy') continue;
+    const key = `${order.accountType}:${order.symbol}`;
+    const currentPrice = getInstrumentPrice(order.symbol);
+
+    if (!positions[key]) {
+      positions[key] = {
+        symbol: order.symbol,
+        accountType: order.accountType,
+        quantity: 0,
+        totalCost: 0,
+        avgEntryPrice: 0,
+        currentPrice,
+        displayName: order.displayName || order.symbol
+      };
     }
 
-    res.json({
-      trader: traderData,
-      activeSession,
-      packages: data[0],
-      recentTransactions: data[2].filter(t => t.traderId === req.user.uid).slice(0, 10)
-    });
+    positions[key].quantity += order.quantity;
+    positions[key].totalCost += order.quantity * order.price;
+    positions[key].avgEntryPrice = positions[key].totalCost / positions[key].quantity;
+    positions[key].currentPrice = currentPrice;
+  }
+
+  return Object.values(positions).map((position) => ({
+    ...position,
+    marketValue: Number((position.quantity * position.currentPrice).toFixed(2)),
+    unrealizedPnl: Number(((position.currentPrice - position.avgEntryPrice) * position.quantity).toFixed(2)),
+    pnlPercent: Number(((position.currentPrice / position.avgEntryPrice - 1) * 100).toFixed(2))
+  }));
+}
+
+async function getTraderDashboardData(uid) {
+  const [packages, sessions, transactions] = await getCollections('packages', 'sessions', 'transactions');
+  const traderDoc = await adminDb.collection('traders').doc(uid).get();
+  const userDoc = await adminDb.collection('users').doc(uid).get();
+
+  const traderData = traderDoc.exists ? traderDoc.data() : {};
+  const userData = userDoc.exists ? userDoc.data() : {};
+  const mergedTrader = {
+    ...traderData,
+    ...userData,
+    demoDepositBalance: traderData.demoDepositBalance ?? traderData.demoDepositBalance ?? DEFAULT_DEMO_DEPOSIT,
+    demoTradingBalance: traderData.demoTradingBalance ?? DEFAULT_DEMO_TRADING,
+    depositBalance: traderData.depositBalance ?? 0,
+    tradingBalance: traderData.tradingBalance ?? 0
+  };
+
+  let activeSession = null;
+  if (mergedTrader.activeSessionId) {
+    const sessDoc = await adminDb.collection('sessions').doc(mergedTrader.activeSessionId).get();
+    if (sessDoc.exists) activeSession = sessDoc.data();
+  }
+
+  const ordersSnapshot = await adminDb.collection('tradeOrders').where('traderId', '==', uid).orderBy('createdAt', 'desc').get();
+  const orders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const positions = aggregatePositions(orders);
+
+  return {
+    trader: mergedTrader,
+    activeSession,
+    packages,
+    recentTransactions: transactions.filter(t => t.traderId === uid).slice(0, 10),
+    tradeHistory: orders.filter(order => order.status !== 'open').slice(0, 20),
+    openPositions: positions,
+    marketData: getMarketInstruments(),
+    supportedInstruments: getMarketInstruments()
+  };
+}
+
+app.get('/api/trader/dashboard', authMiddleware, async (req, res) => {
+  try {
+    const dashboard = await getTraderDashboardData(req.user.uid);
+    res.json(dashboard);
   } catch (error) {
+    console.error('Trader dashboard error:', error);
     res.status(500).json({ message: 'Error fetching dashboard' });
+  }
+});
+
+app.get('/api/trader/market-data', authMiddleware, async (req, res) => {
+  try {
+    res.json(getMarketInstruments());
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching market data' });
+  }
+});
+
+app.post('/api/trader/order', authMiddleware, async (req, res) => {
+  try {
+    const { symbol, side, amount, accountType = 'real' } = req.body;
+    if (!symbol || !side) {
+      return res.status(400).json({ message: 'Symbol and side are required' });
+    }
+
+    const instrument = SUPPORTED_INSTRUMENTS.find(item => item.symbol === symbol);
+    if (!instrument) {
+      return res.status(400).json({ message: 'Unsupported instrument' });
+    }
+
+    const traderDoc = await adminDb.collection('traders').doc(req.user.uid).get();
+    const userDoc = await adminDb.collection('users').doc(req.user.uid).get();
+    const traderData = traderDoc.exists ? traderDoc.data() : {};
+    const userData = userDoc.exists ? userDoc.data() : {};
+    const mergedTrader = {
+      ...traderData,
+      ...userData,
+      demoDepositBalance: traderData.demoDepositBalance ?? DEFAULT_DEMO_DEPOSIT,
+      demoTradingBalance: traderData.demoTradingBalance ?? DEFAULT_DEMO_TRADING,
+      depositBalance: traderData.depositBalance ?? 0,
+      tradingBalance: traderData.tradingBalance ?? 0
+    };
+
+    const accountFields = getAccountFields(accountType);
+    const depositAmount = mergedTrader[accountFields.deposit] || 0;
+    const tradingAmount = mergedTrader[accountFields.trading] || 0;
+    const currentPrice = getInstrumentPrice(symbol);
+    const fillPrice = side === 'buy'
+      ? Number((currentPrice + instrument.spread / 2).toFixed(instrument.decimals))
+      : Number((currentPrice - instrument.spread / 2).toFixed(instrument.decimals));
+
+    const batch = adminDb.batch();
+    const userRef = adminDb.collection('users').doc(req.user.uid);
+    const traderRef = adminDb.collection('traders').doc(req.user.uid);
+
+    if (side === 'buy') {
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ message: 'Amount must be greater than zero' });
+      }
+      if (depositAmount < amount) {
+        return res.status(400).json({ message: 'Insufficient deposit balance' });
+      }
+
+      const quantity = Number((amount / fillPrice).toFixed(instrument.decimals));
+      if (quantity <= 0) {
+        return res.status(400).json({ message: 'Trade amount is too small for this instrument' });
+      }
+
+      const orderRef = adminDb.collection('tradeOrders').doc();
+      batch.set(orderRef, {
+        id: orderRef.id,
+        traderId: req.user.uid,
+        symbol,
+        displayName: instrument.displayName,
+        side,
+        accountType,
+        price: fillPrice,
+        quantity,
+        amount: Number((quantity * fillPrice).toFixed(2)),
+        status: 'open',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      batch.update(userRef, {
+        [accountFields.deposit]: Number((depositAmount - amount).toFixed(2))
+      });
+      batch.update(traderRef, {
+        [accountFields.deposit]: admin.firestore.FieldValue.increment(-amount),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      await batch.commit();
+
+      return res.json({ message: 'Order placed successfully', order: { symbol, side, quantity, price: fillPrice, accountType } });
+    }
+
+    if (side === 'sell') {
+      const openOrdersSnapshot = await adminDb.collection('tradeOrders')
+        .where('traderId', '==', req.user.uid)
+        .where('symbol', '==', symbol)
+        .where('accountType', '==', accountType)
+        .where('status', '==', 'open')
+        .get();
+
+      const openOrders = openOrdersSnapshot.docs.map(doc => ({ id: doc.id, ref: doc.ref, ...doc.data() }));
+      if (openOrders.length === 0) {
+        return res.status(400).json({ message: 'No open position for this symbol and account type' });
+      }
+
+      let totalQuantity = 0;
+      let totalCost = 0;
+      for (const order of openOrders) {
+        totalQuantity += order.quantity;
+        totalCost += order.quantity * order.price;
+      }
+      const avgEntry = totalCost / totalQuantity;
+      const proceeds = Number((totalQuantity * fillPrice).toFixed(2));
+      const pnl = Number(((fillPrice - avgEntry) * totalQuantity).toFixed(2));
+
+      for (const order of openOrders) {
+        batch.update(order.ref, {
+          status: 'closed',
+          closedAt: admin.firestore.FieldValue.serverTimestamp(),
+          closePrice: fillPrice,
+          pnl: Number(((fillPrice - order.price) * order.quantity).toFixed(2))
+        });
+      }
+
+      batch.update(userRef, {
+        [accountFields.deposit]: Number((depositAmount + proceeds).toFixed(2)),
+        [accountFields.trading]: Number((tradingAmount + pnl).toFixed(2))
+      });
+      batch.update(traderRef, {
+        [accountFields.deposit]: admin.firestore.FieldValue.increment(proceeds),
+        [accountFields.trading]: admin.firestore.FieldValue.increment(pnl),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      await batch.commit();
+
+      return res.json({
+        message: 'Position closed successfully',
+        closedQuantity: totalQuantity,
+        closePrice: fillPrice,
+        pnl
+      });
+    }
+
+    return res.status(400).json({ message: 'Unsupported order side' });
+  } catch (error) {
+    console.error('Trader order error:', error);
+    res.status(400).json({ message: error.message });
   }
 });
 
@@ -421,12 +690,11 @@ app.post('/api/admin/marketer', authMiddleware, roleMiddleware(['admin']), async
     const usernameQuery = await adminDb.collection('users').where('username', '==', normalizedUsername).get();
     if (!usernameQuery.empty) return res.status(400).json({ message: 'Username already taken' });
 
-    // Create Firebase Auth user
+    // Create Firebase Auth user (phoneNumber cannot be set via createUser)
     const userRecord = await adminAuth.createUser({
       email,
       password,
-      displayName: fullName,
-      phoneNumber
+      displayName: fullName
     });
 
     // Create user and marketer docs
@@ -458,6 +726,223 @@ app.post('/api/admin/marketer', authMiddleware, roleMiddleware(['admin']), async
     res.json({ message: 'Marketer created successfully', uid: userRecord.uid });
   } catch (error) {
     console.error('Create marketer error:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
+const stripUndefined = (obj) => Object.entries(obj)
+  .filter(([, value]) => value !== undefined)
+  .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
+
+// Package Management (admin only)
+app.post('/api/admin/package', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { type, name, price, expectedReturn, duration, hashrate, tier, maxAmount } = req.body;
+    if (!type || !name || price === undefined) return res.status(400).json({ message: 'Missing fields' });
+    
+    const pkgRef = adminDb.collection('packages').doc();
+    const packageData = stripUndefined({
+      id: pkgRef.id,
+      type,
+      name,
+      price,
+      expectedReturn,
+      duration: duration || 60,
+      hashrate,
+      tier,
+      maxAmount,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    await pkgRef.set(packageData);
+    invalidateCache('packages');
+    res.json({ message: 'Package created', id: pkgRef.id });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.put('/api/admin/package/:id', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { type, name, price, expectedReturn, duration, hashrate, tier, maxAmount } = req.body;
+    const updateData = stripUndefined({
+      type,
+      name,
+      price,
+      expectedReturn,
+      duration,
+      hashrate,
+      tier,
+      maxAmount,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    await adminDb.collection('packages').doc(id).update(updateData);
+    invalidateCache('packages');
+    res.json({ message: 'Package updated' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.delete('/api/admin/package/:id', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    await adminDb.collection('packages').doc(id).delete();
+    invalidateCache('packages');
+    res.json({ message: 'Package deleted' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Get all marketer payouts (admin only)
+app.get('/api/admin/marketer-payouts', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const payouts = await adminDb.collection('marketerPayouts').orderBy('requestedAt', 'desc').get();
+    const data = payouts.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json(data);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Get platform settings (admin only)
+app.get('/api/admin/settings', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const settings = await adminDb.collection('settings').doc('platform').get();
+    res.json(settings.data() || {});
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.put('/api/admin/settings', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { platformName, adminReferralCode, marketerMinWithdrawal, marketerCommissionPercent, adminCutPercent } = req.body;
+    await adminDb.collection('settings').doc('platform').update({
+      platformName,
+      adminReferralCode,
+      marketerMinWithdrawal,
+      marketerCommissionPercent: marketerCommissionPercent || 85,
+      adminCutPercent: adminCutPercent || 15,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    invalidateCache('settings');
+    res.json({ message: 'Settings updated' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Get marketer details with recruited traders and total commission (admin only)
+app.get('/api/admin/marketer/:id', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const marketerDoc = await adminDb.collection('users').doc(id).get();
+    if (!marketerDoc.exists || marketerDoc.data().role !== 'marketer') {
+      return res.status(404).json({ message: 'Marketer not found' });
+    }
+
+    const marketer = { id: marketerDoc.id, ...marketerDoc.data() };
+
+    // Get all traders linked to this marketer
+    const tradersSnapshot = await adminDb.collection('users')
+      .where('role', '==', 'trader')
+      .where('marketerId', '==', id)
+      .get();
+    
+    const traders = tradersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Get marketer's commission data
+    const marketerDataDoc = await adminDb.collection('marketers').doc(id).get();
+    const marketerData = marketerDataDoc.data() || {};
+
+    res.json({
+      marketer,
+      traders,
+      totalCommission: marketerData.totalEarned || 0,
+      commissionBalance: marketerData.commissionBalance || 0,
+      tradersCount: traders.length
+    });
+  } catch (error) {
+    console.error('Get marketer error:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Get trader details (admin only)
+app.get('/api/admin/trader/:id', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const traderDoc = await adminDb.collection('users').doc(id).get();
+    if (!traderDoc.exists || traderDoc.data().role !== 'trader') {
+      return res.status(404).json({ message: 'Trader not found' });
+    }
+
+    const trader = { id: traderDoc.id, ...traderDoc.data() };
+
+    // Get marketer info if exists
+    let marketerName = 'No marketer';
+    if (trader.marketerId && trader.marketerId !== 'ADMIN') {
+      const marketerDoc = await adminDb.collection('users').doc(trader.marketerId).get();
+      if (marketerDoc.exists) {
+        marketerName = marketerDoc.data().name;
+      }
+    } else if (trader.marketerId === 'ADMIN') {
+      marketerName = 'Admin';
+    }
+
+    res.json({
+      ...trader,
+      marketerName
+    });
+  } catch (error) {
+    console.error('Get trader error:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Update trader details (admin only) - for editing balance and other fields
+app.put('/api/admin/trader/:id', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tradingBalance, depositBalance, email } = req.body;
+
+    const updateData = {};
+    if (tradingBalance !== undefined) {
+      updateData.tradingBalance = tradingBalance;
+    }
+    if (depositBalance !== undefined) {
+      updateData.depositBalance = depositBalance;
+    }
+    if (email !== undefined) {
+      updateData.email = email;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: 'No valid fields to update' });
+    }
+
+    // Update both users and traders collections
+    const batch = adminDb.batch();
+    
+    batch.update(adminDb.collection('users').doc(id), {
+      ...updateData,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    batch.update(adminDb.collection('traders').doc(id), {
+      ...updateData,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    await batch.commit();
+    invalidateCache('users', 'traders');
+    res.json({ message: 'Trader updated successfully' });
+  } catch (error) {
+    console.error('Update trader error:', error);
     res.status(400).json({ message: error.message });
   }
 });

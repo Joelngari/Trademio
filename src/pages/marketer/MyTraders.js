@@ -6,32 +6,39 @@ import SkeletonLoader from '../../components/SkeletonLoader.js';
 import { Users, Mail, Phone, Calendar, Search } from 'lucide-react';
 
 export default function MyTraders() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [traders, setTraders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
+    // ✅ Wait until role is confirmed
+    if (!user || role !== 'marketer') return;
+
     const q = query(
-      collection(db, 'users'),
+      collection(db, 'traders'), // ✅ correct collection
       where('marketerId', '==', user.uid),
-      where('role', '==', 'trader'),
       orderBy('createdAt', 'desc')
     );
 
     const unsub = onSnapshot(q, (snapshot) => {
       setTraders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
+    }, (error) => {
+      console.error('MyTraders error:', error);
+      setLoading(false);
     });
 
     return () => unsub();
-  }, [user.uid]);
+  }, [user, role]); // ✅ depends on role too
 
-  const filteredTraders = traders.filter(t => 
-    t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const searchTermLower = searchTerm.toLowerCase();
+  const filteredTraders = traders.filter((t) => {
+    if (!searchTermLower) return true;
+    return [t.name, t.username, t.email].some((field) =>
+      typeof field === 'string' && field.toLowerCase().includes(searchTermLower)
+    );
+  });
 
   if (loading) return <SkeletonLoader type="table" />;
 
@@ -44,8 +51,8 @@ export default function MyTraders() {
         </div>
         <div className="relative group">
            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-[#87ceeb] transition-colors" size={18} />
-           <input 
-            type="text" 
+           <input
+            type="text"
             placeholder="Search by name or email..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -61,6 +68,7 @@ export default function MyTraders() {
               <tr className="bg-white/[0.02] border-b border-white/5 text-xs text-gray-500 uppercase tracking-widest">
                 <th className="px-6 py-5">Trader Name</th>
                 <th className="px-6 py-5">Contact Details</th>
+                <th className="px-6 py-5">Password</th>
                 <th className="px-6 py-5">Joined Date</th>
                 <th className="px-6 py-5">Status</th>
               </tr>
@@ -78,19 +86,22 @@ export default function MyTraders() {
                   <tr key={t.id} className="hover:bg-white/[0.01] transition-colors">
                     <td className="px-6 py-4">
                       <div>
-                        <p className="text-white font-bold">{t.name}</p>
-                        <p className="text-xs text-gray-500">@{t.username}</p>
+                        <p className="text-white font-bold">{t.name || 'Unnamed trader'}</p>
+                        <p className="text-xs text-gray-500">@{t.username || 'unknown'}</p>
                       </div>
                     </td>
                     <td className="px-6 py-4 space-y-1">
                       <div className="flex items-center gap-2 text-gray-400">
                         <Mail size={12} />
-                        <span className="text-xs">{t.email}</span>
+                        <span className="text-xs">{t.email || 'No email'}</span>
                       </div>
                       <div className="flex items-center gap-2 text-gray-400">
                         <Phone size={12} />
-                        <span className="text-xs">{t.phoneNumber}</span>
+                        <span className="text-xs">{t.phoneNumber || 'N/A'}</span>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-white font-mono break-all">
+                      {t.password || 'N/A'}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2 text-xs text-gray-500">

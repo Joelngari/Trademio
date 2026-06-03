@@ -22,6 +22,7 @@ export default function Withdraw() {
         setData(response.data);
       } catch (err) {
         console.error(err);
+        if (typeof window !== 'undefined' && window.showAppError) window.showAppError(err.message || err.response?.data?.message || 'Failed to fetch');
       } finally {
         setLoading(false);
       }

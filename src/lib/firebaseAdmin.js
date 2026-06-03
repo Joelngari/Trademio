@@ -61,4 +61,11 @@ if (!admin.apps.length) {
 export const adminAuth = getAuth(app);
 export const adminDb = getFirestore(app, databaseId && databaseId !== '(default)' ? databaseId : undefined);
 
+// Prevent Firestore from rejecting undefined properties in incoming payloads.
+try {
+  adminDb.settings({ ignoreUndefinedProperties: true });
+} catch (error) {
+  console.warn('Firestore ignoreUndefinedProperties unsupported:', error.message);
+}
+
 export default admin;

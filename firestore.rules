@@ -12,6 +12,16 @@ service cloud.firestore {
       return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    // Check if user is a trader
+    function isTrader() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'trader';
+    }
+
+    // Check if user is a marketer
+    function isMarketer() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'marketer';
+    }
+
     // Users collection
     match /users/{userId} {
       // Admins can read any user. Users can read their own profile.
@@ -26,9 +36,17 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Traders collection: admin full access; traders can read/write their own document
+    // Traders collection: admin full access; traders can read/write their own document; marketers can read traders who used their referral
     match /traders/{traderId} {
-      allow read, write: if isAdmin() || (isSignedIn() && request.auth.uid == traderId);
+      allow read: if isAdmin()
+                    || (isSignedIn() && request.auth.uid == traderId)
+                    || (isSignedIn() && isMarketer() && (
+                        // Trader document contains either a marketerId referencing the marketer's uid
+                        // or a referralCode that matches the marketer's referralCode field
+                        (resource.data.marketerId == request.auth.uid)
+                        || (resource.data.referralCode != null && resource.data.referralCode == get(/databases/$(database)/documents/marketers/$(request.auth.uid)).data.referralCode)
+                      ));
+      allow write: if isAdmin() || (isSignedIn() && request.auth.uid == traderId);
     }
 
     // Marketers collection: admin full access; marketers can read/write their own document

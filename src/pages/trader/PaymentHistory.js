@@ -57,7 +57,9 @@ export default function PaymentHistory() {
                   </td>
                 </tr>
               ) : (
-                transactions.map((t) => (
+                transactions
+                  .filter(t => t.status === 'success') // Only show successful transactions
+                  .map((t) => (
                   <tr key={t.id} className="hover:bg-white/[0.01] transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">

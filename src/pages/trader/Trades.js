@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../lib/AuthContext.js';
 import { traderApi } from '../../services/api.js';
 import { db } from '../../lib/firebase.js';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, doc, onSnapshot } from 'firebase/firestore';
 import { formatCurrency } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
 import { RefreshCw, Clock, ArrowRight, CheckCircle2 } from 'lucide-react';
@@ -11,36 +11,107 @@ import { Link } from 'react-router-dom';
 export default function Trades() {
   const { profile } = useAuth();
   const [data, setData] = useState(null);
+  const [marketData, setMarketData] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState('');
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await traderApi.getDashboard();
-        setData(response.data);
-        setLoading(false);
-        
-        if (response.data.activeSession) {
-          // Listen for real-time changes to the session
-          const sessionRef = doc(db, 'sessions', response.data.activeSession.id);
-          const unsub = onSnapshot(sessionRef, (docSnap) => {
-            if (docSnap.exists()) {
-              setActiveSession(docSnap.data());
-            } else {
-              setActiveSession(null);
-            }
-          });
-          return () => unsub();
-        }
-      } catch (err) {
-        console.error(err);
-        setLoading(false);
+  const aggregatePositions = (orderDocs, marketQuotes) => {
+    const positions = {};
+    const marketMap = new Map((marketQuotes || []).map((item) => [item.symbol, item]));
+
+    orderDocs.filter((order) => order.status === 'open').forEach((order) => {
+      const key = `${order.symbol}-${order.accountType}`;
+      const currentPrice = marketMap.get(order.symbol)?.price || order.price || 0;
+
+      if (!positions[key]) {
+        positions[key] = {
+          symbol: order.symbol,
+          displayName: order.displayName || order.symbol,
+          accountType: order.accountType,
+          quantity: 0,
+          totalCost: 0,
+          avgEntryPrice: 0,
+          currentPrice
+        };
       }
-    };
-    fetchData();
+
+      positions[key].quantity += order.quantity;
+      positions[key].totalCost += order.quantity * order.price;
+      positions[key].avgEntryPrice = positions[key].totalCost / positions[key].quantity;
+      positions[key].currentPrice = currentPrice;
+    });
+
+    return Object.values(positions).map((position) => ({
+      ...position,
+      marketValue: Number((position.quantity * position.currentPrice).toFixed(2)),
+      unrealizedPnl: Number(((position.currentPrice - position.avgEntryPrice) * position.quantity).toFixed(2))
+    }));
+  };
+
+  const buildDashboardFromOrders = (orderDocs, marketQuotes) => ({
+    openPositions: aggregatePositions(orderDocs, marketQuotes),
+    tradeHistory: orderDocs.filter((order) => order.status !== 'open').slice(0, 10)
+  });
+
+  const fetchData = useCallback(async () => {
+    try {
+      const response = await traderApi.getDashboard();
+      setData((prev) => ({
+        ...prev,
+        ...response.data
+      }));
+      setMarketData(response.data.marketData || []);
+      setLoading(false);
+    } catch (err) {
+        console.error(err);
+        if (typeof window !== 'undefined' && window.showAppError) window.showAppError(err.message || err);
+        setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    let sessionUnsub = null;
+    if (data?.activeSession) {
+      const sessionRef = doc(db, 'sessions', data.activeSession.id);
+      sessionUnsub = onSnapshot(sessionRef, (docSnap) => {
+        if (docSnap.exists()) {
+          setActiveSession(docSnap.data());
+        } else {
+          setActiveSession(null);
+        }
+      });
+    }
+
+    return () => {
+      if (sessionUnsub) sessionUnsub();
+    };
+  }, [data?.activeSession]);
+
+  useEffect(() => {
+    if (!profile?.uid) return;
+
+    const ordersQuery = query(
+      collection(db, 'tradeOrders'),
+      where('traderId', '==', profile.uid)
+    );
+
+    const unsubscribe = onSnapshot(ordersQuery, (snapshot) => {
+      const newOrders = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      setOrders(newOrders);
+      setData((prev) => ({
+        ...prev,
+        ...buildDashboardFromOrders(newOrders, marketData)
+      }));
+    });
+
+    return () => unsubscribe();
+  }, [profile?.uid, marketData]);
 
   useEffect(() => {
     if (!activeSession || activeSession.status !== 'active') return;
@@ -73,11 +144,105 @@ export default function Trades() {
 
   if (loading) return <SkeletonLoader type="card" />;
 
+  const positions = data?.openPositions || [];
+  const tradeHistory = data?.tradeHistory || [];
+
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Live Activations</h1>
-        <p className="text-gray-400">Monitor your active trading sessions and mining rigs in real-time.</p>
+        <h1 className="text-3xl font-bold text-white mb-2">Live Trading</h1>
+        <p className="text-gray-400">Track open positions, recent trade history, and active sessions.</p>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="bg-[#121212] border border-white/5 rounded-3xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-white">Open Positions</h2>
+              <p className="text-sm text-gray-500">Your current live positions across accounts.</p>
+            </div>
+          </div>
+          {positions.length > 0 ? (
+            <div className="space-y-4">
+              {positions.map((position) => (
+                <div key={`${position.symbol}-${position.accountType}`} className="bg-white/5 border border-white/10 rounded-3xl p-4">
+                  <div className="flex items-center justify-between gap-4 mb-3">
+                    <div>
+                      <p className="text-sm text-gray-400">{position.accountType === 'demo' ? 'Demo' : 'Real'} · {position.symbol}</p>
+                      <p className="text-lg font-bold text-white">{position.displayName || position.symbol}</p>
+                    </div>
+                    <div className={`text-sm font-semibold ${position.unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {position.unrealizedPnl >= 0 ? '+' : ''}{formatCurrency(position.unrealizedPnl, profile?.preferredCurrency)}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm text-gray-400">
+                    <div>
+                      <p>Qty</p>
+                      <p className="text-white font-medium">{position.quantity}</p>
+                    </div>
+                    <div>
+                      <p>Entry</p>
+                      <p className="text-white font-medium">{position.avgEntryPrice}</p>
+                    </div>
+                    <div>
+                      <p>Market</p>
+                      <p className="text-white font-medium">{position.currentPrice}</p>
+                    </div>
+                    <div>
+                      <p>Value</p>
+                      <p className="text-white font-medium">{formatCurrency(position.marketValue, profile?.preferredCurrency)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-400">
+              <p>No open positions yet. Place a trade from the home dashboard to start.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-[#121212] border border-white/5 rounded-3xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-white">Trade History</h2>
+              <p className="text-sm text-gray-500">Closed trades and completed orders.</p>
+            </div>
+            <span className="text-xs uppercase tracking-widest text-gray-500">Recent</span>
+          </div>
+          {tradeHistory.length > 0 ? (
+            <div className="space-y-4">
+              {tradeHistory.slice(0, 10).map((trade) => (
+                <div key={trade.id} className="bg-white/5 border border-white/10 rounded-3xl p-4">
+                  <div className="flex items-center justify-between gap-4 mb-2">
+                    <div>
+                      <p className="text-sm text-gray-400">{trade.symbol} · {trade.side.toUpperCase()}</p>
+                      <p className="text-lg font-bold text-white">{trade.displayName || trade.symbol}</p>
+                    </div>
+                    <div className={`text-sm font-semibold ${trade.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {trade.pnl >= 0 ? '+' : ''}{formatCurrency(trade.pnl || 0, profile?.preferredCurrency)}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm text-gray-400">
+                    <div>
+                      <p>Qty</p>
+                      <p className="text-white font-medium">{trade.quantity}</p>
+                    </div>
+                    <div>
+                      <p>Price</p>
+                      <p className="text-white font-medium">{trade.price}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-400">
+              <p>No trade history yet. Your completed positions will appear here.</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {!activeSession ? (

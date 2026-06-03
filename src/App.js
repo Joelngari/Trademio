@@ -1,6 +1,7 @@
 import React, { useState, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './lib/AuthContext.js';
+import ErrorBoundary from './components/ErrorBoundary.js';
 import Sidebar from './components/Sidebar.js';
 import TopBar from './components/TopBar.js';
 import TickerTape from './components/TickerTape.js';
@@ -83,7 +84,8 @@ export default function App() {
   if (loading) return null;
 
   return (
-    <Routes>
+    <ErrorBoundary>
+      <Routes>
       {/* Auth Routes */}
       <Route path="/login" element={user ? <Navigate to={`/${role}/home`} replace /> : <Login />} />
       <Route path="/register" element={user ? <Navigate to={`/${role}/home`} replace /> : <Register />} />
@@ -129,6 +131,7 @@ export default function App() {
       {/* Default Route */}
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+    </ErrorBoundary>
   );
 }
