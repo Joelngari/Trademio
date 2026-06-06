@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../lib/AuthContext.js';
 import { traderApi, paymentApi } from '../../services/api.js';
+import { watchPaymentStatus } from '../../lib/paymentStatus.js';
 import { formatCurrency } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
 import { ShieldCheck, ArrowRight, Loader2, Star } from 'lucide-react';
@@ -11,8 +12,11 @@ export default function WithdrawalBot() {
   const [trader, setTrader] = useState(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(null);
-  const [phone, setPhone] = useState(profile?.phoneNumber || '');
+  const [phoneInputs, setPhoneInputs] = useState({});
   const [message, setMessage] = useState(null);
+  const paymentWatchRef = useRef(null);
+
+  useEffect(() => () => paymentWatchRef.current?.(), []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -33,8 +37,18 @@ export default function WithdrawalBot() {
     setPurchasing(pkgId);
     setMessage(null);
     try {
-      await paymentApi.initiateStkPush({ packageId: pkgId, phoneNumber: phone });
-      setMessage({ type: 'success', text: 'STK push sent! Complete the payment to upgrade your withdrawal tier.' });
+      const response = await paymentApi.initiateStkPush({ packageId: pkgId, phoneNumber: phoneInputs[pkgId] || profile?.phoneNumber || '' });
+      setMessage({ type: 'success', text: 'STK push sent! Complete the payment to activate this withdrawal tier.' });
+      paymentWatchRef.current?.();
+      paymentWatchRef.current = watchPaymentStatus(response.data.checkoutRequestId, (status) => {
+        if (status === 'success') {
+          setMessage({ type: 'success', text: 'Payment completed successfully. Your withdrawal tier is now active.' });
+          setTimeout(() => window.location.reload(), 1000);
+        }
+        if (status === 'failed') {
+          setMessage({ type: 'error', text: 'Payment failed or was cancelled. Please try again.' });
+        }
+      });
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to initiate payment' });
     } finally {
@@ -111,8 +125,8 @@ export default function WithdrawalBot() {
                  {!isCurrent && (
                    <input 
                     type="text" 
-                    value={phone} 
-                    onChange={(e) => setPhone(e.target.value)}
+                    value={phoneInputs[pkg.id] ?? ''}
+                    onChange={(e) => setPhoneInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
                     placeholder="M-Pesa Number"
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:border-[#87ceeb] outline-none"
                    />

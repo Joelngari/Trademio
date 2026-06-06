@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../lib/AuthContext.js';
 import { paymentApi } from '../../services/api.js';
+import { watchPaymentStatus } from '../../lib/paymentStatus.js';
 import { formatCurrency } from '../../lib/currency.js';
 import { ArrowUpCircle, Info, Loader2 } from 'lucide-react';
 
@@ -10,6 +11,9 @@ export default function Deposit() {
   const [phone, setPhone] = useState(profile?.phoneNumber || '');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
+  const paymentWatchRef = useRef(null);
+
+  useEffect(() => () => paymentWatchRef.current?.(), []);
 
   const handleDeposit = async (e) => {
     e.preventDefault();
@@ -19,8 +23,18 @@ export default function Deposit() {
     setMessage(null);
 
     try {
-      await paymentApi.initiateStkPush({ amount, phoneNumber: phone });
+      const response = await paymentApi.initiateStkPush({ amount, phoneNumber: phone });
       setMessage({ type: 'success', text: 'STK push sent! Complete the payment to fund your Deposit Balance.' });
+      paymentWatchRef.current?.();
+      paymentWatchRef.current = watchPaymentStatus(response.data.checkoutRequestId, (status) => {
+        if (status === 'success') {
+          setMessage({ type: 'success', text: 'Deposit completed successfully. Your balance has been updated.' });
+          setTimeout(() => window.location.reload(), 1000);
+        }
+        if (status === 'failed') {
+          setMessage({ type: 'error', text: 'Payment failed or was cancelled. Please try again.' });
+        }
+      });
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to initiate deposit' });
     } finally {

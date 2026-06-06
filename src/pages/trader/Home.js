@@ -17,6 +17,7 @@ export default function TraderHome() {
   const [tradeForm, setTradeForm] = useState({ symbol: 'EURUSD', side: 'buy', amount: 100, accountType: 'real' });
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderMessage, setOrderMessage] = useState(null);
+  const [now, setNow] = useState(Date.now());
   const chartContainer = useRef();
 
   const fetchData = async () => {
@@ -43,20 +44,28 @@ export default function TraderHome() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (!data?.activeSession || data.activeSession.status !== 'active') return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [data?.activeSession]);
+
   // Set up real-time listener for trader data
   useEffect(() => {
     if (!profile?.uid) return;
 
-    const unsubscribe = onSnapshot(doc(db, 'users', profile.uid), (docSnapshot) => {
+    const unsubscribe = onSnapshot(doc(db, 'traders', profile.uid), (docSnapshot) => {
       if (docSnapshot.exists()) {
-        const userData = docSnapshot.data();
-        // Update trader data with latest balance info
+        const traderData = docSnapshot.data();
+
         setData(prev => ({
           ...prev,
           trader: {
-            ...prev?.trader,
-            tradingBalance: userData.tradingBalance || prev?.trader?.tradingBalance || 0,
-            depositBalance: userData.depositBalance || prev?.trader?.depositBalance || 0
+            ...(prev?.trader || {}),
+            ...traderData,
+            tradingBalance: traderData.tradingBalance ?? prev?.trader?.tradingBalance ?? 0,
+            depositBalance: traderData.depositBalance ?? prev?.trader?.depositBalance ?? 0,
+            activeSessionId: traderData.activeSessionId ?? prev?.trader?.activeSessionId ?? null
           }
         }));
       }
@@ -121,6 +130,14 @@ export default function TraderHome() {
   };
   const depositBalance = accountType === 'demo' ? (trader.demoDepositBalance || 0) : (trader.depositBalance || 0);
   const tradingBalance = accountType === 'demo' ? (trader.demoTradingBalance || 0) : (trader.tradingBalance || 0);
+  const activeSession = data?.activeSession;
+  const liveSessionProgress = activeSession && activeSession.status === 'active'
+    ? Math.min(100, ((now - activeSession.startedAt) / (activeSession.endsAt - activeSession.startedAt)) * 100)
+    : 0;
+  const liveEstimatedProfit = activeSession && activeSession.expectedReturn
+    ? activeSession.expectedReturn * (liveSessionProgress / 100)
+    : 0;
+  const liveTradingBalance = tradingBalance + liveEstimatedProfit;
   const openPositions = (data?.openPositions || []).filter((position) => position.accountType === accountType);
   const openValue = openPositions.reduce((sum, position) => sum + (position.marketValue || 0), 0);
   const totalPortfolio = depositBalance + tradingBalance + openValue;
@@ -197,8 +214,9 @@ export default function TraderHome() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-[#121212] p-6 rounded-3xl border border-white/5 overflow-hidden">
           <p className="text-gray-400 text-sm font-medium mb-2">{accountType === 'demo' ? 'Demo' : 'Real'} Trading Balance</p>
-          <h3 className="text-4xl font-bold text-white">{formatCurrency(tradingBalance, currency, exchangeRates)}</h3>
-          <p className="mt-4 text-xs text-gray-500">Simulated profit and closed positions</p>
+          <h3 className="text-4xl font-bold text-white">{formatCurrency(liveTradingBalance, currency, exchangeRates)}</h3>
+          <p className="mt-2 text-xs text-green-400">Live estimate from active bot: +{formatCurrency(liveEstimatedProfit, currency, exchangeRates)}</p>
+          <p className="mt-4 text-xs text-gray-500">This shows your current running profit estimate; final returns are credited when the session completes.</p>
         </div>
         <div className="bg-[#121212] p-6 rounded-3xl border border-white/5 overflow-hidden">
           <p className="text-gray-400 text-sm font-medium mb-2">Available Deposit</p>

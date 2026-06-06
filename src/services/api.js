@@ -20,7 +20,7 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    const serverMessage = error.response?.data?.message;
+    const serverMessage = error.response?.data?.message || error.response?.data?.errorMessage;
     const status = error.response?.status;
     let message = serverMessage || error.message || 'An unexpected error occurred';
 
@@ -29,14 +29,15 @@ api.interceptors.response.use(
     if (status === 403) message = 'You do not have permission to perform this action.';
     if (status === 429) message = 'Too many requests. Please try again later.';
 
-      // If a global error UI is available, show the message
-      try {
-        if (typeof window !== 'undefined' && window.showAppError) window.showAppError(message);
-      } catch (e) {
-        // ignore
-      }
+    error.userMessage = message;
 
-      return Promise.reject(new Error(message));
+    try {
+      if (typeof window !== 'undefined' && window.showAppError) window.showAppError(message);
+    } catch (e) {
+      // ignore
+    }
+
+    return Promise.reject(error);
   }
 );
 
@@ -46,12 +47,15 @@ export const authApi = {
 
 export const paymentApi = {
   initiateStkPush: (data) => api.post('/payments/stk-push', data),
+  getPaymentStatus: (checkoutRequestId) => api.get(`/payments/status/${checkoutRequestId}`),
 };
 
 export const traderApi = {
   getDashboard: () => api.get('/trader/dashboard'),
   getMarketData: () => api.get('/trader/market-data'),
-  placeOrder: (data) => api.post('/trader/order', data)
+  placeOrder: (data) => api.post('/trader/order', data),
+  stopSession: (sessionId) => api.post(`/trader/session/${sessionId}/stop`),
+  resumeSession: (sessionId) => api.post(`/trader/session/${sessionId}/restart`)
 };
 
 export const adminApi = {

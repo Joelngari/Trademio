@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api, { traderApi, paymentApi } from '../../services/api.js';
+import { watchPaymentStatus } from '../../lib/paymentStatus.js';
 import { formatCurrency } from '../../lib/currency.js';
 import { useAuth } from '../../lib/AuthContext.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
@@ -11,8 +12,11 @@ export default function Mining() {
   const [activeSession, setActiveSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(null);
-  const [phone, setPhone] = useState(profile?.phoneNumber || '');
+  const [phoneInputs, setPhoneInputs] = useState({});
   const [message, setMessage] = useState(null);
+  const paymentWatchRef = useRef(null);
+
+  useEffect(() => () => paymentWatchRef.current?.(), []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -35,8 +39,18 @@ export default function Mining() {
     setPurchasing(pkgId);
     setMessage(null);
     try {
-      await paymentApi.initiateStkPush({ packageId: pkgId, phoneNumber: phone });
-      setMessage({ type: 'success', text: 'STK push sent! Check your phone and enter your M-Pesa PIN.' });
+      const response = await paymentApi.initiateStkPush({ packageId: pkgId, phoneNumber: phoneInputs[pkgId] || profile?.phoneNumber || '' });
+      setMessage({ type: 'success', text: 'STK push sent! Complete the payment to activate this mining rig.' });
+      paymentWatchRef.current?.();
+      paymentWatchRef.current = watchPaymentStatus(response.data.checkoutRequestId, (status) => {
+        if (status === 'success') {
+          setMessage({ type: 'success', text: 'Payment completed successfully. Your mining rig is now active.' });
+          setTimeout(() => window.location.reload(), 1000);
+        }
+        if (status === 'failed') {
+          setMessage({ type: 'error', text: 'Payment failed or was cancelled. Please try again.' });
+        }
+      });
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to initiate payment' });
     } finally {
@@ -110,8 +124,8 @@ export default function Mining() {
               <div className="space-y-4 relative z-10">
                 <input
                   type="text"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  value={phoneInputs[pkg.id] ?? ''}
+                  onChange={(e) => setPhoneInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
                   placeholder="2547XXXXXXXX"
                   className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:border-[#87ceeb] outline-none"
                 />

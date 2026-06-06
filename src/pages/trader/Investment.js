@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api, { traderApi, paymentApi } from '../../services/api.js';
+import { watchPaymentStatus } from '../../lib/paymentStatus.js';
 import { formatCurrency } from '../../lib/currency.js';
 import { useAuth } from '../../lib/AuthContext.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
@@ -13,6 +14,9 @@ export default function Investment() {
   const [phone, setPhone] = useState(profile?.phoneNumber || '');
   const [purchasing, setPurchasing] = useState(false);
   const [message, setMessage] = useState(null);
+  const paymentWatchRef = useRef(null);
+
+  useEffect(() => () => paymentWatchRef.current?.(), []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -34,10 +38,18 @@ export default function Investment() {
     setPurchasing(true);
     setMessage(null);
     try {
-      // For fixed investment, we might have a special package or handle custom in backend
-      // Using custom amount in STK Push
-      await paymentApi.initiateStkPush({ amount, phoneNumber: phone, type: 'investment' });
-      setMessage({ type: 'success', text: 'STK push sent! Check your phone and enter your M-Pesa PIN.' });
+      const response = await paymentApi.initiateStkPush({ amount, phoneNumber: phone, type: 'investment' });
+      setMessage({ type: 'success', text: 'STK push sent! Complete the payment to activate this investment.' });
+      paymentWatchRef.current?.();
+      paymentWatchRef.current = watchPaymentStatus(response.data.checkoutRequestId, (status) => {
+        if (status === 'success') {
+          setMessage({ type: 'success', text: 'Payment completed successfully. Your investment session is now active.' });
+          setTimeout(() => window.location.reload(), 1000);
+        }
+        if (status === 'failed') {
+          setMessage({ type: 'error', text: 'Payment failed or was cancelled. Please try again.' });
+        }
+      });
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to initiate investment' });
     } finally {

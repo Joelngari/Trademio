@@ -238,8 +238,29 @@ app.post('/api/payments/stk-push', authMiddleware, paymentLimiter, async (req, r
 
     res.json({ message: 'STK push sent. Check your phone.', checkoutRequestId: result.CheckoutRequestID });
   } catch (error) {
-    console.error('Payment Error:', error);
-    res.status(500).json({ message: 'Failed to initiate payment' });
+    console.error('Payment Error:', error.response?.data || error.message);
+    const status = error.response?.status || 500;
+    const message = error.response?.data?.errorMessage || error.response?.data?.message || 'Failed to initiate payment';
+    res.status(status).json({ message });
+  }
+});
+
+app.get('/api/payments/status/:checkoutRequestId', authMiddleware, async (req, res) => {
+  try {
+    const snapshot = await adminDb.collection('transactions')
+      .where('checkoutRequestId', '==', req.params.checkoutRequestId)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
+      return res.status(404).json({ message: 'Payment not found' });
+    }
+
+    const transaction = snapshot.docs[0].data();
+    res.json({ status: transaction.status || 'pending', transaction });
+  } catch (error) {
+    console.error('Payment status error:', error);
+    res.status(500).json({ message: 'Failed to fetch payment status' });
   }
 });
 
@@ -352,9 +373,12 @@ async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) 
         planName: pkg.name,
         amountPaid: transData.totalAmount,
         expectedReturn: pkg.expectedReturn,
+        totalDurationMs: durationMs,
         startedAt,
         endsAt,
         status: 'active',
+        creditedAmount: 0,
+        lastAccruedAt: startedAt,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       };
 
@@ -513,6 +537,133 @@ app.get('/api/trader/market-data', authMiddleware, async (req, res) => {
     res.json(getMarketInstruments());
   } catch (error) {
     res.status(500).json({ message: 'Error fetching market data' });
+  }
+});
+
+async function creditSessionAccrual(sessionRef, session, now = Date.now()) {
+  if (!session || session.status !== 'active') return 0;
+
+  const totalDurationMs = Number(session.totalDurationMs || (session.endsAt - session.startedAt) || 0);
+  const expectedReturn = Number(session.expectedReturn || 0);
+  const alreadyCredited = Number(session.creditedAmount || 0);
+
+  if (!totalDurationMs || !expectedReturn || alreadyCredited >= expectedReturn) {
+    return 0;
+  }
+
+  const sinceLastAccrual = Math.max(0, now - (session.lastAccruedAt || session.startedAt || now));
+  if (sinceLastAccrual <= 0) return 0;
+
+  const ratePerMs = expectedReturn / totalDurationMs;
+  const delta = Math.min(expectedReturn - alreadyCredited, ratePerMs * sinceLastAccrual);
+  if (delta <= 0) return 0;
+
+  await adminDb.runTransaction(async (t) => {
+    const liveSessionDoc = await t.get(sessionRef);
+    const liveSession = liveSessionDoc.data();
+    const liveCredited = Number(liveSession.creditedAmount || 0);
+    const liveExpected = Number(liveSession.expectedReturn || 0);
+    const liveTotalDurationMs = Number(liveSession.totalDurationMs || (liveSession.endsAt - liveSession.startedAt) || 0);
+    const liveRatePerMs = liveExpected / liveTotalDurationMs;
+    const liveSince = Math.max(0, now - (liveSession.lastAccruedAt || liveSession.startedAt || now));
+    const liveDelta = Math.min(liveExpected - liveCredited, liveRatePerMs * liveSince);
+
+    if (liveDelta <= 0) return;
+
+    t.update(sessionRef, {
+      creditedAmount: liveCredited + liveDelta,
+      lastAccruedAt: now
+    });
+    t.update(adminDb.collection('traders').doc(liveSession.traderId), {
+      tradingBalance: admin.firestore.FieldValue.increment(liveDelta)
+    });
+  });
+
+  return delta;
+}
+
+app.post('/api/trader/session/:sessionId/stop', authMiddleware, async (req, res) => {
+  try {
+    const sessionRef = adminDb.collection('sessions').doc(req.params.sessionId);
+    const sessionDoc = await sessionRef.get();
+
+    if (!sessionDoc.exists) {
+      return res.status(404).json({ message: 'Session not found' });
+    }
+
+    const session = sessionDoc.data();
+    if (session.traderId !== req.user.uid && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'You cannot stop this session' });
+    }
+
+    const now = Date.now();
+    await creditSessionAccrual(sessionRef, session, now);
+
+    const remainingMs = Math.max(0, Number(session.endsAt || 0) - now);
+
+    await adminDb.runTransaction(async (t) => {
+      const latestDoc = await t.get(sessionRef);
+      const latestSession = latestDoc.data();
+      t.update(sessionRef, {
+        status: 'stopped',
+        remainingMs,
+        stoppedAt: admin.firestore.FieldValue.serverTimestamp(),
+        pausedAt: now,
+        lastAccruedAt: now,
+        creditedAmount: Number(latestSession.creditedAmount || 0)
+      });
+      t.update(adminDb.collection('traders').doc(session.traderId), {
+        activeSessionId: sessionRef.id
+      });
+    });
+
+    invalidateCache('traders', 'sessions');
+    res.json({ message: 'Session stopped successfully' });
+  } catch (error) {
+    console.error('Stop session error:', error);
+    res.status(500).json({ message: 'Failed to stop session' });
+  }
+});
+
+app.post('/api/trader/session/:sessionId/restart', authMiddleware, async (req, res) => {
+  try {
+    const sessionRef = adminDb.collection('sessions').doc(req.params.sessionId);
+    const sessionDoc = await sessionRef.get();
+
+    if (!sessionDoc.exists) {
+      return res.status(404).json({ message: 'Session not found' });
+    }
+
+    const session = sessionDoc.data();
+    if (session.traderId !== req.user.uid && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'You cannot restart this session' });
+    }
+
+    const remainingMs = Math.max(0, Number(session.remainingMs || 0));
+    if (remainingMs <= 0) {
+      return res.status(400).json({ message: 'This session has no remaining time to resume.' });
+    }
+
+    const now = Date.now();
+    await adminDb.runTransaction(async (t) => {
+      t.update(sessionRef, {
+        status: 'active',
+        endsAt: now + remainingMs,
+        resumedAt: admin.firestore.FieldValue.serverTimestamp(),
+        remainingMs: null,
+        pausedAt: null,
+        lastAccruedAt: now
+      });
+      t.update(adminDb.collection('traders').doc(session.traderId), {
+        activeSessionId: sessionRef.id
+      });
+    });
+
+    invalidateCache('traders', 'sessions');
+    res.json({ message: 'Session resumed successfully' });
+  } catch (error) {
+    console.error('Restart session error:', error);
+    res.status(500).json({ message: 'Failed to restart session' });
   }
 });
 
@@ -949,7 +1100,7 @@ app.put('/api/admin/trader/:id', authMiddleware, roleMiddleware(['admin']), asyn
 
 // --- CRON JOB (Session Completion) ---
 
-cron.schedule('* * * * *', async () => {
+cron.schedule('*/10 * * * * *', async () => {
   console.log('Running session completion check...');
   const now = Date.now();
   
@@ -974,16 +1125,22 @@ cron.schedule('* * * * *', async () => {
         continue;
       }
 
+      await creditSessionAccrual(doc.ref, session, now);
+
       await adminDb.runTransaction(async (t) => {
         const traderRef = adminDb.collection('traders').doc(session.traderId);
+        const liveSessionDoc = await t.get(doc.ref);
+        const liveSession = liveSessionDoc.data();
+        const remainingCredited = Number(liveSession.creditedAmount || 0);
+
         t.update(traderRef, {
-          tradingBalance: admin.firestore.FieldValue.increment(session.expectedReturn),
           activeSessionId: null
         });
 
         t.update(doc.ref, {
           status: 'completed',
-          creditedAt: admin.firestore.FieldValue.serverTimestamp()
+          creditedAt: admin.firestore.FieldValue.serverTimestamp(),
+          creditedAmount: Math.max(remainingCredited, Number(liveSession.expectedReturn || 0))
         });
 
         // Record Earning for history
