@@ -34,7 +34,7 @@ export default function MarketerHome() {
      if (navigator.share) {
         try {
            await navigator.share({
-              title: 'Trademio',
+              title: 'Velnix Markets',
               text: 'Join the best Kenyan investment platform and start earning!',
               url: referralLink
            });
@@ -140,7 +140,7 @@ export default function MarketerHome() {
                </div>
                <div className="space-y-1">
                   <p className="text-[10px] text-gray-500 uppercase font-bold">Threshold</p>
-                  <p className="text-lg font-bold text-white">KSh 150</p>
+                  <p className="text-lg font-bold text-white">KSh 10</p>
                </div>
             </div>
          </div>

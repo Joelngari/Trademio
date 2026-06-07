@@ -19,6 +19,7 @@ import {
 } from './server-validation.js';
 import rateLimit from 'express-rate-limit';
 import cron from 'node-cron';
+import nodemailer from 'nodemailer';
 
 dotenv.config();
 
@@ -51,6 +52,61 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json());
+
+const notificationEmailTo = process.env.NOTIFICATION_TO_EMAIL || 'joelgitonga79@gmail.com';
+
+const createEmailTransport = () => {
+  const host = process.env.SMTP_HOST || process.env.BREVO_HOST;
+  const port = Number(process.env.SMTP_PORT || process.env.BREVO_PORT || 587);
+  const user = process.env.SMTP_USER || process.env.BREVO_USER;
+  const pass = process.env.SMTP_PASS || process.env.BREVO_PASS;
+
+  if (!host || !user || !pass) {
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+    tls: { rejectUnauthorized: false }
+  });
+};
+
+const sendSuccessfulPaymentEmail = async (transaction, traderData) => {
+  const transporter = createEmailTransport();
+  if (!transporter) {
+    console.warn('SMTP notification skipped: missing email credentials.');
+    return;
+  }
+
+  const customerName = traderData?.name || traderData?.fullName || 'Customer';
+  const customerEmail = traderData?.email || 'N/A';
+  const phoneNumber = transaction.phoneNumber || 'N/A';
+  const amount = transaction.totalAmount || 0;
+  const receipt = transaction.mpesaReceiptNumber || transaction.id || 'N/A';
+  const typeLabel = transaction.type === 'deposit' ? 'Deposit' : 'Transaction';
+
+  const mailOptions = {
+    from: process.env.SMTP_FROM || process.env.BREVO_FROM || process.env.SMTP_USER || process.env.BREVO_USER,
+    to: notificationEmailTo,
+    replyTo: customerEmail !== 'N/A' ? customerEmail : undefined,
+    subject: `New ${typeLabel} Alert – KES ${amount}`,
+    html: `
+      <h2>Successful payment received</h2>
+      <p><strong>Customer:</strong> ${customerName}</p>
+      <p><strong>Amount:</strong> KES ${amount}</p>
+      <p><strong>Phone:</strong> ${phoneNumber}</p>
+      <p><strong>Receipt:</strong> ${receipt}</p>
+      <p><strong>Type:</strong> ${typeLabel}</p>
+      <p><strong>Transaction ID:</strong> ${transaction.id || 'N/A'}</p>
+      <p>This alert was generated automatically from the STK payment callback.</p>
+    `
+  };
+
+  await transporter.sendMail(mailOptions);
+};
 
 // Auth Middleware
 const authMiddleware = async (req, res, next) => {
@@ -226,6 +282,7 @@ app.post('/api/payments/stk-push', authMiddleware, paymentLimiter, async (req, r
       marketerId: req.user.marketerId,
       totalAmount: amount,
       type: type,
+      phoneNumber: phoneNumber || null,
       status: 'pending',
       metadata: metadata,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -292,8 +349,21 @@ app.post('/api/payments/callback', async (req, res) => {
     if (resultCode === 0) {
       // Success
       const mpesaReceiptNumber = stkCallback.CallbackMetadata.Item.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
-      
+
       const splitResult = await handleSuccessfulPayment(transactionDoc.ref, transData, mpesaReceiptNumber);
+
+      try {
+        const traderDoc = await adminDb.collection('traders').doc(transData.traderId).get();
+        await sendSuccessfulPaymentEmail({
+          ...transData,
+          id: transactionDoc.id,
+          mpesaReceiptNumber,
+          phoneNumber: transData.phoneNumber || null
+        }, traderDoc.data());
+      } catch (emailError) {
+        console.error('Notification email error:', emailError);
+      }
+
       res.status(200).json(splitResult);
     } else {
       // Failure
@@ -415,10 +485,54 @@ const SUPPORTED_INSTRUMENTS = [
 const DEFAULT_DEMO_DEPOSIT = 20000;
 const DEFAULT_DEMO_TRADING = 0;
 
-function getInstrumentPrice(symbol) {
-  const instrument = SUPPORTED_INSTRUMENTS.find(item => item.symbol === symbol);
-  if (!instrument) return null;
+async function fetchJson(url) {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0'
+      }
+    });
 
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.warn('Live market fetch failed:', url, error.message);
+    return null;
+  }
+}
+
+async function getLivePriceSnapshot() {
+  const [frankfurter, crypto, aapl, gold] = await Promise.all([
+    fetchJson('https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY'),
+    fetchJson('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd'),
+    fetchJson('https://query1.finance.yahoo.com/v8/finance/chart/AAPL?interval=1m&range=1d'),
+    fetchJson('https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?interval=1m&range=1d')
+  ]);
+
+  const prices = {};
+
+  if (frankfurter?.rates) {
+    prices.EURUSD = Number((1 / frankfurter.rates.EUR).toFixed(5));
+    prices.GBPUSD = Number((1 / frankfurter.rates.GBP).toFixed(5));
+    prices.USDJPY = Number(frankfurter.rates.JPY.toFixed(3));
+  }
+
+  if (crypto?.bitcoin?.usd) prices.BTCUSD = Number(crypto.bitcoin.usd.toFixed(2));
+  if (crypto?.ethereum?.usd) prices.ETHUSD = Number(crypto.ethereum.usd.toFixed(2));
+
+  const aaplPrice = aapl?.chart?.result?.[0]?.meta?.regularMarketPrice;
+  if (typeof aaplPrice === 'number') prices.AAPL = Number(aaplPrice.toFixed(2));
+
+  const goldPrice = gold?.chart?.result?.[0]?.meta?.regularMarketPrice;
+  if (typeof goldPrice === 'number') prices.XAUUSD = Number(goldPrice.toFixed(2));
+
+  return prices;
+}
+
+function getSyntheticPrice(symbol, instrument) {
   const now = Date.now();
   const cycle = Math.sin(now / 22000 + symbol.length);
   const wobble = Math.cos(now / 13000 + symbol.length * 1.7);
@@ -429,9 +543,20 @@ function getInstrumentPrice(symbol) {
   return Number(price.toFixed(instrument.decimals));
 }
 
-function getMarketInstruments() {
-  return SUPPORTED_INSTRUMENTS.map((instrument) => {
-    const price = getInstrumentPrice(instrument.symbol);
+async function getInstrumentPrice(symbol, livePrices = null) {
+  const instrument = SUPPORTED_INSTRUMENTS.find(item => item.symbol === symbol);
+  if (!instrument) return null;
+
+  if (livePrices && typeof livePrices[symbol] === 'number') {
+    return Number(livePrices[symbol].toFixed(instrument.decimals));
+  }
+
+  return getSyntheticPrice(symbol, instrument);
+}
+
+async function getMarketInstruments(livePrices = null) {
+  const instruments = await Promise.all(SUPPORTED_INSTRUMENTS.map(async (instrument) => {
+    const price = await getInstrumentPrice(instrument.symbol, livePrices);
     const bid = Number((price - instrument.spread / 2).toFixed(instrument.decimals));
     const ask = Number((price + instrument.spread / 2).toFixed(instrument.decimals));
 
@@ -441,7 +566,9 @@ function getMarketInstruments() {
       bid,
       ask
     };
-  });
+  }));
+
+  return instruments;
 }
 
 function getAccountFields(accountType) {
@@ -451,12 +578,12 @@ function getAccountFields(accountType) {
   return { deposit: 'depositBalance', trading: 'tradingBalance' };
 }
 
-function aggregatePositions(orders) {
+async function aggregatePositions(orders, livePrices = null) {
   const positions = {};
   for (const order of orders) {
     if (order.status !== 'open' || order.side !== 'buy') continue;
     const key = `${order.accountType}:${order.symbol}`;
-    const currentPrice = getInstrumentPrice(order.symbol);
+    const currentPrice = await getInstrumentPrice(order.symbol, livePrices);
 
     if (!positions[key]) {
       positions[key] = {
@@ -508,7 +635,9 @@ async function getTraderDashboardData(uid) {
 
   const ordersSnapshot = await adminDb.collection('tradeOrders').where('traderId', '==', uid).orderBy('createdAt', 'desc').get();
   const orders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  const positions = aggregatePositions(orders);
+  const livePrices = await getLivePriceSnapshot();
+  const marketData = await getMarketInstruments(livePrices);
+  const positions = await aggregatePositions(orders, livePrices);
 
   return {
     trader: mergedTrader,
@@ -517,8 +646,8 @@ async function getTraderDashboardData(uid) {
     recentTransactions: transactions.filter(t => t.traderId === uid).slice(0, 10),
     tradeHistory: orders.filter(order => order.status !== 'open').slice(0, 20),
     openPositions: positions,
-    marketData: getMarketInstruments(),
-    supportedInstruments: getMarketInstruments()
+    marketData,
+    supportedInstruments: marketData
   };
 }
 
@@ -534,7 +663,8 @@ app.get('/api/trader/dashboard', authMiddleware, async (req, res) => {
 
 app.get('/api/trader/market-data', authMiddleware, async (req, res) => {
   try {
-    res.json(getMarketInstruments());
+    const livePrices = await getLivePriceSnapshot();
+    res.json(await getMarketInstruments(livePrices));
   } catch (error) {
     res.status(500).json({ message: 'Error fetching market data' });
   }
@@ -952,7 +1082,27 @@ app.delete('/api/admin/package/:id', authMiddleware, roleMiddleware(['admin']), 
 app.get('/api/admin/marketer-payouts', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
   try {
     const payouts = await adminDb.collection('marketerPayouts').orderBy('requestedAt', 'desc').get();
-    const data = payouts.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const data = await Promise.all(payouts.docs.map(async (doc) => {
+      const payout = doc.data();
+      let marketerName = 'Unknown';
+
+      if (payout.marketerId) {
+        const userDoc = await adminDb.collection('users').doc(payout.marketerId).get();
+        if (userDoc.exists) {
+          marketerName = userDoc.data().name || userDoc.data().fullName || 'Unknown';
+        }
+      }
+
+      return {
+        id: doc.id,
+        ...payout,
+        marketerName,
+        requestedAt: payout.requestedAt?.toDate ? payout.requestedAt.toDate().toISOString() : payout.requestedAt || null,
+        failReason: payout.failReason || (payout.status === 'paid' ? 'Payment completed' : payout.status === 'processing' ? 'Payment is being processed' : ''),
+        mpesaReceiptNumber: payout.mpesaReceiptNumber || ''
+      };
+    }));
+
     res.json(data);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -1166,10 +1316,20 @@ async function seedDatabase() {
   const settingsDoc = await settingsRef.get();
   if (!settingsDoc.exists) {
     await settingsRef.set({
-      platformName: 'Trademio',
-      adminReferralCode: 'TRADEMIO-ADMIN',
-      marketerMinWithdrawal: 150
+      platformName: 'Velnix Markets',
+      adminReferralCode: 'VELNIX-ADMIN',
+      marketerMinWithdrawal: 10,
+      marketerCommissionPercent: 85,
+      adminCutPercent: 15
     });
+  } else {
+    await settingsRef.set({
+      marketerMinWithdrawal: 10,
+      marketerCommissionPercent: settingsDoc.data()?.marketerCommissionPercent ?? 85,
+      adminCutPercent: settingsDoc.data()?.adminCutPercent ?? 15,
+      platformName: settingsDoc.data()?.platformName || 'Velnix Markets',
+      adminReferralCode: settingsDoc.data()?.adminReferralCode || 'VELNIX-ADMIN'
+    }, { merge: true });
   }
 
   const packagesCheck = await adminDb.collection('packages').limit(1).get();
@@ -1209,7 +1369,7 @@ async function seedDatabase() {
 
 async function seedAdminUser() {
   const adminEmail = 'joelgitonga79@gmail.com';
-  const adminPassword = 'Joelngari@2023^';
+  const adminPassword = process.env.ADMIN_SEED_PASSWORD || 'Trd@2023!';
   const adminUsername = 'adminjoel';
   const adminPhoneNumber = '0113623027';
   const adminFullName = 'Admin Joel';
@@ -1281,6 +1441,13 @@ app.post('/api/payouts/marketer', authMiddleware, roleMiddleware(['marketer']), 
     const { amount, phoneNumber } = req.body;
     const marketerId = req.user.uid;
 
+    const settingsDoc = await adminDb.collection('settings').doc('platform').get();
+    const minWithdrawal = Number(settingsDoc.data()?.marketerMinWithdrawal ?? 10);
+
+    if (amount < minWithdrawal) {
+      throw new Error(`Minimum withdrawal amount is KSh ${minWithdrawal}.`);
+    }
+
     const payoutResult = await adminDb.runTransaction(async (t) => {
       const marketerRef = adminDb.collection('marketers').doc(marketerId);
       const marketerDoc = await t.get(marketerRef);
@@ -1331,25 +1498,42 @@ app.post('/api/payouts/marketer', authMiddleware, roleMiddleware(['marketer']), 
 app.post('/api/admin/payouts/approve/:requestId', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
   try {
     const { requestId } = req.params;
-    const withdrawalRef = adminDb.collection('withdrawals').doc(requestId);
-    const withdrawalDoc = await withdrawalRef.get();
 
-    if (!withdrawalDoc.exists) return res.status(404).json({ message: 'Request not found' });
-    const withdrawal = withdrawalDoc.data();
+    await adminDb.runTransaction(async (t) => {
+      const withdrawalRef = adminDb.collection('withdrawals').doc(requestId);
+      const withdrawalDoc = await t.get(withdrawalRef);
 
-    if (withdrawal.status !== 'pending') return res.status(400).json({ message: 'Request already processed' });
+      if (!withdrawalDoc.exists) {
+        throw new Error('Request not found');
+      }
 
-    // Call Daraja B2C
-    const b2cResponse = await initiateB2C(withdrawal.phoneNumber, withdrawal.amount, 'Trader Withdrawal', 'Earnings', process.env.DARAJA_B2C_RESULT_URL);
-    
-    await withdrawalRef.update({ 
-      status: 'processing', 
-      conversationId: b2cResponse.ConversationID 
+      const withdrawal = withdrawalDoc.data();
+      if (withdrawal.status !== 'pending') {
+        throw new Error('Request already processed');
+      }
+
+      const traderRef = adminDb.collection('traders').doc(withdrawal.traderId);
+      const traderDoc = await t.get(traderRef);
+      const trader = traderDoc.data();
+
+      if (!trader || (trader.tradingBalance || 0) < withdrawal.amount) {
+        throw new Error('Insufficient trader balance');
+      }
+
+      t.update(traderRef, {
+        tradingBalance: admin.firestore.FieldValue.increment(-withdrawal.amount)
+      });
+
+      t.update(withdrawalRef, {
+        status: 'approved',
+        approvedAt: admin.firestore.FieldValue.serverTimestamp(),
+        adminNote: 'Approved for manual processing'
+      });
     });
-    
-    res.json({ message: 'Withdrawal approved and payment initiated' });
+
+    res.json({ message: 'Withdrawal approved for manual processing' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(400).json({ message: error.message || 'Failed to approve withdrawal' });
   }
 });
 

@@ -168,7 +168,7 @@ export default function Trades() {
                 <div key={`${position.symbol}-${position.accountType}`} className="bg-white/5 border border-white/10 rounded-3xl p-4">
                   <div className="flex items-center justify-between gap-4 mb-3">
                     <div>
-                      <p className="text-sm text-gray-400">{position.accountType === 'demo' ? 'Demo' : 'Real'} · {position.symbol}</p>
+                      <p className="text-sm text-gray-400">Real · {position.symbol}</p>
                       <p className="text-lg font-bold text-white">{position.displayName || position.symbol}</p>
                     </div>
                     <div className={`text-sm font-semibold ${position.unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>

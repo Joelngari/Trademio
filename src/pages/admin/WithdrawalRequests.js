@@ -21,11 +21,10 @@ export default function WithdrawalRequests() {
   }, [tab]);
 
   const handleApprove = async (req) => {
-    if (!window.confirm('Approve this withdrawal? This will trigger B2C payment and deduct trader balance.')) return;
+    if (!window.confirm('Approve this withdrawal? This will deduct the trader balance for manual processing.')) return;
     try {
-      // Backend handles B2C and balance deduction on success
       await api.post(`/admin/payouts/approve/${req.id}`);
-      alert('Withdrawal approved and initiated');
+      alert('Withdrawal approved for manual processing');
     } catch (err) {
       alert('Failed: ' + (err.response?.data?.message || err.message));
     }
@@ -71,6 +70,7 @@ export default function WithdrawalRequests() {
                 <th className="px-6 py-5">Phone</th>
                 <th className="px-6 py-5">Amount</th>
                 <th className="px-6 py-5">Requested At</th>
+                <th className="px-6 py-5">Status Note</th>
                 {tab === 'pending' && <th className="px-6 py-5 text-right">Actions</th>}
               </tr>
             </thead>
@@ -91,6 +91,9 @@ export default function WithdrawalRequests() {
                     </td>
                     <td className="px-6 py-4 text-xs text-gray-500">
                        {r.requestedAt?.toDate().toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 text-xs text-gray-400">
+                      {r.mpesaReceiptNumber || r.adminNote || '—'}
                     </td>
                     {tab === 'pending' && (
                       <td className="px-6 py-4 text-right">

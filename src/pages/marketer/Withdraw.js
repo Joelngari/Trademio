@@ -11,7 +11,7 @@ export default function MarketerWithdraw() {
   const { user, profile } = useAuth();
   const [marketerData, setMarketerData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [amount, setAmount] = useState(150);
+  const [amount, setAmount] = useState(10);
   const [phone, setPhone] = useState(profile?.phoneNumber || '');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
@@ -28,7 +28,7 @@ export default function MarketerWithdraw() {
 
   const handleWithdraw = async (e) => {
     e.preventDefault();
-    const min = marketerData?.minimumWithdrawal || 150;
+    const min = 10;
     
     if (amount < min) {
       setMessage({ type: 'error', text: `Minimum withdrawal amount is KSh ${min}.` });
@@ -55,7 +55,7 @@ export default function MarketerWithdraw() {
 
   if (loading) return <SkeletonLoader type="card" />;
 
-  const minWithdrawal = marketerData?.minimumWithdrawal || 150;
+  const minWithdrawal = 10;
 
   return (
     <div className="space-y-8">
@@ -118,7 +118,7 @@ export default function MarketerWithdraw() {
                 <h3 className="font-bold text-white">Earnings Overview</h3>
                 <div className="flex items-center gap-2 text-xs text-green-500">
                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                   Instant B2C Active
+                   Instant Withdrawals
                 </div>
              </div>
 
@@ -134,7 +134,7 @@ export default function MarketerWithdraw() {
                   <div className="bg-[#87ceeb]/5 border border-[#87ceeb]/10 p-6 rounded-2xl flex gap-4">
                      <Info size={20} className="text-[#87ceeb] shrink-0 mt-0.5" />
                      <p className="text-xs text-gray-400 leading-relaxed">
-                        Marketer payouts are processed automatically via B2C API. Funds should arrive in your mobile wallet within minutes after submission.
+                        Marketer payouts are processed automatically. Funds should arrive in your mobile wallet within minutes after submission.
                      </p>
                   </div>
 

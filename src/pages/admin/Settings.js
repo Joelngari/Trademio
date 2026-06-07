@@ -6,7 +6,7 @@ export default function AdminSettings() {
   const [settings, setSettings] = useState({
     platformName: '',
     adminReferralCode: '',
-    marketerMinWithdrawal: 0,
+    marketerMinWithdrawal: 10,
     marketerCommissionPercent: 85,
     adminCutPercent: 15
   });
@@ -24,7 +24,7 @@ export default function AdminSettings() {
       setSettings({
         platformName: data.platformName || '',
         adminReferralCode: data.adminReferralCode || '',
-        marketerMinWithdrawal: data.marketerMinWithdrawal || 0,
+        marketerMinWithdrawal: data.marketerMinWithdrawal ?? 10,
         marketerCommissionPercent: data.marketerCommissionPercent ?? 85,
         adminCutPercent: data.adminCutPercent ?? 15
       });

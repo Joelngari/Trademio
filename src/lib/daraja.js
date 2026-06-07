@@ -13,12 +13,24 @@ const {
   DARAJA_B2C_INITIATOR_NAME,
   DARAJA_B2C_SECURITY_CREDENTIAL,
   DARAJA_B2C_RESULT_URL,
+  DARAJA_ENV,
   NODE_ENV
 } = process.env;
 
-const BASE_URL = NODE_ENV === 'production' 
-  ? 'https://api.safaricom.co.ke' 
+const selectedEnv = (DARAJA_ENV || NODE_ENV || 'sandbox').toLowerCase();
+const BASE_URL = selectedEnv === 'production'
+  ? 'https://api.safaricom.co.ke'
   : 'https://sandbox.safaricom.co.ke';
+
+function normalizePhoneNumber(phoneNumber) {
+  const raw = String(phoneNumber || '').trim().replace(/\s+/g, '');
+
+  if (/^0\d{9}$/.test(raw)) return `254${raw.slice(1)}`;
+  if (/^\+254\d{9}$/.test(raw)) return raw.replace('+', '');
+  if (/^254\d{9}$/.test(raw)) return raw;
+
+  return raw;
+}
 
 export async function getAccessToken() {
   const auth = Buffer.from(`${DARAJA_CONSUMER_KEY}:${DARAJA_CONSUMER_SECRET}`).toString('base64');
@@ -37,6 +49,7 @@ export async function initiateStkPush(phoneNumber, amount, accountReference, tra
   const accessToken = await getAccessToken();
   const timestamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
   const password = Buffer.from(`${DARAJA_SHORTCODE}${DARAJA_PASSKEY}${timestamp}`).toString('base64');
+  const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber);
 
   const payload = {
     BusinessShortCode: DARAJA_SHORTCODE,
@@ -44,9 +57,9 @@ export async function initiateStkPush(phoneNumber, amount, accountReference, tra
     Timestamp: timestamp,
     TransactionType: 'CustomerPayBillOnline',
     Amount: Math.round(amount),
-    PartyA: phoneNumber,
+    PartyA: normalizedPhoneNumber,
     PartyB: DARAJA_SHORTCODE,
-    PhoneNumber: phoneNumber,
+    PhoneNumber: normalizedPhoneNumber,
     CallBackURL: DARAJA_CALLBACK_URL,
     AccountReference: accountReference,
     TransactionDesc: transactionDesc
@@ -65,6 +78,7 @@ export async function initiateStkPush(phoneNumber, amount, accountReference, tra
 
 export async function initiateB2C(phoneNumber, amount, remarks, occasion, callbackUrl) {
   const accessToken = await getAccessToken();
+  const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber);
 
   const payload = {
     InitiatorName: DARAJA_B2C_INITIATOR_NAME,
@@ -72,7 +86,7 @@ export async function initiateB2C(phoneNumber, amount, remarks, occasion, callba
     CommandID: 'BusinessPayment',
     Amount: Math.round(amount),
     PartyA: DARAJA_B2C_SHORTCODE,
-    PartyB: phoneNumber,
+    PartyB: normalizedPhoneNumber,
     Remarks: remarks,
     QueueTimeOutURL: callbackUrl,
     ResultURL: callbackUrl,

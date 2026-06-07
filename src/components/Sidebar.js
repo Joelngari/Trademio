@@ -66,7 +66,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
       <aside className={`fixed top-0 left-0 bottom-0 w-64 bg-[#121212] border-r border-white/5 z-50 transform transition-transform duration-300 md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex flex-col h-full">
           <div className="p-6">
-            <h1 className="text-2xl font-bold text-[#87ceeb] tracking-tight">Trademio</h1>
+            <h1 className="text-2xl font-bold text-[#87ceeb] tracking-tight">Velnix Markets</h1>
           </div>
 
           <nav className="flex-1 px-4 space-y-1 overflow-y-auto custom-scrollbar">

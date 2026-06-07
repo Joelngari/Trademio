@@ -11,10 +11,11 @@ export default function TraderHome() {
   const { profile } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [exchangeRates, setExchangeRates] = useState({ KES: 1, USD: 0.0076, EUR: 0.007, GBP: 0.006 }); // Mock for initial render
+  const [exchangeRates, setExchangeRates] = useState({ KES: 1, USD: 0.0076, EUR: 0.007, GBP: 0.006 });
   const [refreshing, setRefreshing] = useState(false);
-  const [accountType, setAccountType] = useState('real');
   const [tradeForm, setTradeForm] = useState({ symbol: 'EURUSD', side: 'buy', amount: 100, accountType: 'real' });
+  const [chartStyle, setChartStyle] = useState('4');
+  const [chartSymbol, setChartSymbol] = useState('FX:EURUSD');
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderMessage, setOrderMessage] = useState(null);
   const [now, setNow] = useState(Date.now());
@@ -79,12 +80,6 @@ export default function TraderHome() {
     await fetchData();
   };
 
-  const handleAccountTypeChange = (type) => {
-    setAccountType(type);
-    setTradeForm((prev) => ({ ...prev, accountType: type }));
-    setOrderMessage(null);
-  };
-
   const handleOrderSubmit = async (side) => {
     if (!data?.marketData) return;
     setOrderLoading(true);
@@ -94,7 +89,7 @@ export default function TraderHome() {
       const payload = {
         symbol: tradeForm.symbol,
         side,
-        accountType: accountType
+        accountType: 'real'
       };
 
       if (side === 'buy') {
@@ -118,9 +113,12 @@ export default function TraderHome() {
 
   const currency = profile?.preferredCurrency || 'KES';
   const trader = data?.trader || {};
+  const accountType = 'real';
 
   const marketData = data?.marketData || [];
-  const selectedInstrument = marketData.find(item => item.symbol === tradeForm.symbol) || marketData[0] || {
+  const selectedInstrument = marketData.find(item => item.symbol === tradeForm.symbol)
+    || marketData.find(item => item.symbol === 'EURUSD')
+    || marketData[0] || {
     symbol: 'EURUSD',
     displayName: 'EUR / USD',
     chartSymbol: 'FX:EURUSD',
@@ -128,8 +126,8 @@ export default function TraderHome() {
     spread: '---',
     decimals: 5
   };
-  const depositBalance = accountType === 'demo' ? (trader.demoDepositBalance || 0) : (trader.depositBalance || 0);
-  const tradingBalance = accountType === 'demo' ? (trader.demoTradingBalance || 0) : (trader.tradingBalance || 0);
+  const depositBalance = trader.depositBalance || 0;
+  const tradingBalance = trader.tradingBalance || 0;
   const activeSession = data?.activeSession;
   const liveSessionProgress = activeSession && activeSession.status === 'active'
     ? Math.min(100, ((now - activeSession.startedAt) / (activeSession.endsAt - activeSession.startedAt)) * 100)
@@ -138,53 +136,56 @@ export default function TraderHome() {
     ? activeSession.expectedReturn * (liveSessionProgress / 100)
     : 0;
   const liveTradingBalance = tradingBalance + liveEstimatedProfit;
-  const openPositions = (data?.openPositions || []).filter((position) => position.accountType === accountType);
+  const openPositions = (data?.openPositions || []).filter((position) => position.accountType === 'real');
   const openValue = openPositions.reduce((sum, position) => sum + (position.marketValue || 0), 0);
   const totalPortfolio = depositBalance + tradingBalance + openValue;
   const estimatedQuantity = selectedInstrument.price ? Number((tradeForm.amount / selectedInstrument.price).toFixed(selectedInstrument.decimals || 5)) : 0;
+  const resolvedChartSymbol = selectedInstrument?.chartSymbol || `FX:${selectedInstrument?.symbol || 'EURUSD'}`;
 
-  // Initialize TradingView widget once `selectedInstrument` is available
+  useEffect(() => {
+    setChartSymbol(resolvedChartSymbol || 'FX:EURUSD');
+  }, [resolvedChartSymbol]);
+
+  // Initialize the TradingView advanced chart widget on load and keep it live.
   useEffect(() => {
     if (!chartContainer.current) return;
-    if (!selectedInstrument || !selectedInstrument.symbol) return;
 
-    // Clear previous widget
-    chartContainer.current.innerHTML = '';
+    const container = chartContainer.current;
+    container.innerHTML = '';
 
     const script = document.createElement('script');
-    script.src = 'https://s3.tradingview.com/tv.js';
+    script.id = 'tradingview-advanced-chart';
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+    script.type = 'text/javascript';
     script.async = true;
-    script.onload = () => {
-      try {
-        if (window.TradingView) {
-          new window.TradingView.widget({
-            width: '100%',
-            height: 500,
-            symbol: selectedInstrument.chartSymbol || `FX:${selectedInstrument.symbol}` || 'FX:EURUSD',
-            interval: 'D',
-            timezone: 'Etc/UTC',
-            theme: 'dark',
-            style: '1',
-            locale: 'en',
-            toolbar_bg: '#f1f3f6',
-            enable_publishing: false,
-            allow_symbol_change: true,
-            container_id: 'tradingview_chart'
-          });
-        }
-      } catch (e) {
-        // silently ignore chart init errors
-        console.error('TradingView init error', e);
-      }
-    };
+    script.innerHTML = JSON.stringify({
+      autosize: true,
+      symbol: chartSymbol,
+      interval: '1',
+      timezone: 'Africa/Nairobi',
+      theme: 'dark',
+      style: Number(chartStyle),
+      locale: 'en',
+      enable_publishing: false,
+      allow_symbol_change: true,
+      hide_top_toolbar: false,
+      withdateranges: true,
+      details: true,
+      hide_legend: false,
+      save_image: false,
+      support_host: 'https://www.tradingview.com'
+    });
 
-    chartContainer.current.appendChild(script);
+    container.appendChild(script);
 
     return () => {
-      // cleanup: remove script and widget container contents
-      if (chartContainer.current) chartContainer.current.innerHTML = '';
+      if (container) {
+        container.innerHTML = '';
+        const existing = document.getElementById('tradingview-advanced-chart');
+        if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+      }
     };
-  }, [marketData.length, tradeForm.symbol]);
+  }, [chartSymbol, chartStyle]);
 
   if (loading) return <SkeletonLoader type="stats" />;
 
@@ -193,27 +194,14 @@ export default function TraderHome() {
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Trading Dashboard</h1>
-          <p className="text-gray-400">Trade live instruments with real and demo account support.</p>
+          <p className="text-gray-400">Trade live instruments with real funding and production-ready analytics.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => handleAccountTypeChange('real')}
-            className={`px-5 py-3 rounded-full font-semibold transition ${accountType === 'real' ? 'bg-[#87ceeb] text-[#0a0a0a]' : 'bg-white/5 text-white hover:bg-white/10'}`}
-          >
-            Real Account
-          </button>
-          <button
-            onClick={() => handleAccountTypeChange('demo')}
-            className={`px-5 py-3 rounded-full font-semibold transition ${accountType === 'demo' ? 'bg-[#87ceeb] text-[#0a0a0a]' : 'bg-white/5 text-white hover:bg-white/10'}`}
-          >
-            Demo Account
-          </button>
-        </div>
+        <div className="rounded-full bg-[#87ceeb]/10 border border-[#87ceeb]/20 px-4 py-2 text-sm text-[#87ceeb]">Production trading dashboard</div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-[#121212] p-6 rounded-3xl border border-white/5 overflow-hidden">
-          <p className="text-gray-400 text-sm font-medium mb-2">{accountType === 'demo' ? 'Demo' : 'Real'} Trading Balance</p>
+          <p className="text-gray-400 text-sm font-medium mb-2">Trading Balance</p>
           <h3 className="text-4xl font-bold text-white">{formatCurrency(liveTradingBalance, currency, exchangeRates)}</h3>
           <p className="mt-2 text-xs text-green-400">Live estimate from active bot: +{formatCurrency(liveEstimatedProfit, currency, exchangeRates)}</p>
           <p className="mt-4 text-xs text-gray-500">This shows your current running profit estimate; final returns are credited when the session completes.</p>
@@ -385,20 +373,30 @@ export default function TraderHome() {
       <div className="bg-[#121212] rounded-2xl border border-white/5 overflow-hidden">
         <div className="p-4 border-b border-white/5 flex items-center justify-between">
           <h3 className="font-bold text-white">Live Market Analysis</h3>
-          <div className="flex gap-2">
-            {/* Simple currency switcher could go here */}
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs uppercase tracking-widest text-gray-500">Chart</label>
+            <select
+              value={chartStyle}
+              onChange={(e) => setChartStyle(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none"
+            >
+              <option value="1">Bars</option>
+              <option value="2">Candles</option>
+              <option value="3">Area</option>
+              <option value="4">Line</option>
+            </select>
           </div>
         </div>
-        <div id="tradingview_chart" ref={chartContainer} className="min-h-[500px]" />
+        <div id="tradingview_chart" ref={chartContainer} className="h-[500px] sm:h-[600px] w-full overflow-hidden" />
       </div>
 
       {/* Bottom Widgets */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-[#121212] rounded-2xl border border-white/5 p-4 min-h-[400px]">
+        <div className="bg-[#121212] rounded-2xl border border-white/5 p-4 min-h-[360px] sm:min-h-[400px]">
            <h3 className="font-bold text-white mb-4">Market Overview</h3>
            <TradingViewMarketOverview />
         </div>
-        <div className="bg-[#121212] rounded-2xl border border-white/5 p-4 min-h-[400px]">
+        <div className="bg-[#121212] rounded-2xl border border-white/5 p-4 min-h-[360px] sm:min-h-[400px]">
            <h3 className="font-bold text-white mb-4">Live News Feed</h3>
            <TradingViewNews />
         </div>
@@ -410,61 +408,85 @@ export default function TraderHome() {
 function TradingViewMarketOverview() {
   const container = useRef();
   useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-market-overview.js";
-    script.type = "text/javascript";
+    if (!container.current) return;
+
+    const script = document.createElement('script');
+    script.id = 'tradingview-market-overview';
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-market-overview.js';
+    script.type = 'text/javascript';
     script.async = true;
     script.innerHTML = JSON.stringify({
-      "colorTheme": "dark",
-      "dateRange": "12M",
-      "showChart": true,
-      "locale": "en",
-      "width": "100%",
-      "height": "400",
-      "largeChartUrl": "",
-      "isTransparent": true,
-      "showSymbolLogo": true,
-      "tabs": [
+      colorTheme: 'dark',
+      dateRange: '12M',
+      showChart: true,
+      locale: 'en',
+      width: '100%',
+      height: '400',
+      largeChartUrl: '',
+      isTransparent: true,
+      showSymbolLogo: true,
+      tabs: [
         {
-          "title": "Crypto",
-          "symbols": [
-            { "s": "BINANCE:BTCUSDT", "d": "Bitcoin" },
-            { "s": "BINANCE:ETHUSDT", "d": "Ethereum" },
-            { "s": "BINANCE:SOLUSDT", "d": "Solana" }
+          title: 'Crypto',
+          symbols: [
+            { s: 'BINANCE:BTCUSDT', d: 'Bitcoin' },
+            { s: 'BINANCE:ETHUSDT', d: 'Ethereum' },
+            { s: 'BINANCE:SOLUSDT', d: 'Solana' }
           ]
         },
         {
-          "title": "Forex",
-          "symbols": [
-            { "s": "FX:EURUSD" },
-            { "s": "FX:GBPUSD" },
-            { "s": "FX:USDJPY" }
+          title: 'Forex',
+          symbols: [
+            { s: 'FX:EURUSD' },
+            { s: 'FX:GBPUSD' },
+            { s: 'FX:USDJPY' }
           ]
         }
       ]
     });
+
+    container.current.innerHTML = '';
     container.current.appendChild(script);
+
+    return () => {
+      container.current.innerHTML = '';
+      const existing = document.getElementById('tradingview-market-overview');
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+    };
   }, []);
-  return <div ref={container} className="tradingview-widget-container" />;
+
+  return <div ref={container} className="tradingview-widget-container w-full overflow-hidden" style={{ minHeight: '320px' }} />;
 }
 
 function TradingViewNews() {
   const container = useRef();
   useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-timeline.js";
-    script.type = "text/javascript";
+    if (!container.current) return;
+
+    const script = document.createElement('script');
+    script.id = 'tradingview-news-feed';
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-timeline.js';
+    script.type = 'text/javascript';
     script.async = true;
     script.innerHTML = JSON.stringify({
-      "feedMode": "all_symbols",
-      "colorTheme": "dark",
-      "isTransparent": true,
-      "displayMode": "regular",
-      "width": "100%",
-      "height": "400",
-      "locale": "en"
+      feedMode: 'all_symbols',
+      colorTheme: 'dark',
+      isTransparent: true,
+      displayMode: 'regular',
+      width: '100%',
+      height: '400',
+      locale: 'en'
     });
+
+    container.current.innerHTML = '';
     container.current.appendChild(script);
+
+    return () => {
+      container.current.innerHTML = '';
+      const existing = document.getElementById('tradingview-news-feed');
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+    };
   }, []);
-  return <div ref={container} className="tradingview-widget-container" />;
+
+  return <div ref={container} className="tradingview-widget-container w-full overflow-hidden" style={{ minHeight: '320px' }} />;
 }

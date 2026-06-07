@@ -41,7 +41,7 @@ export default function Login() {
         <div className="absolute top-0 left-0 w-full h-1 bg-[#87ceeb]/20" />
         
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-[#87ceeb] mb-2">Trademio</h1>
+          <h1 className="text-3xl font-bold text-[#87ceeb] mb-2">Velnix Markets</h1>
           <p className="text-gray-400 text-sm">Secure Login</p>
         </div>
 

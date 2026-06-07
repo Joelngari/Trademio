@@ -28,7 +28,7 @@ export const depositSchema = z.object({
 });
 
 export const withdrawalSchema = z.object({
-  amount: z.number().min(10000),
+  amount: z.number().min(10),
   phoneNumber: z.string().min(10)
 });
 

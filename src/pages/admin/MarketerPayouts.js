@@ -41,6 +41,14 @@ export default function MarketerPayouts() {
     }
   };
 
+  const formatDate = (value) => {
+    if (!value) return 'N/A';
+    if (typeof value?.toDate === 'function') return value.toDate().toLocaleString();
+    if (typeof value === 'string') return new Date(value).toLocaleString();
+    if (value?.seconds) return new Date(value.seconds * 1000).toLocaleString();
+    return 'N/A';
+  };
+
   if (loading) return <SkeletonLoader type="card" />;
 
   return (
@@ -86,6 +94,7 @@ export default function MarketerPayouts() {
                   <th className="px-6 py-3 text-left text-gray-400">Status</th>
                   <th className="px-6 py-3 text-left text-gray-400">Requested Date</th>
                   <th className="px-6 py-3 text-left text-gray-400">Phone Number</th>
+                  <th className="px-6 py-3 text-left text-gray-400">Receipt / Note</th>
                 </tr>
               </thead>
               <tbody>
@@ -98,10 +107,11 @@ export default function MarketerPayouts() {
                         {payout.status?.toUpperCase() || 'PENDING'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-gray-400">
-                      {payout.requestedAt?.toDate?.()?.toLocaleDateString() || new Date(payout.requestedAt).toLocaleDateString()}
-                    </td>
+                    <td className="px-6 py-4 text-gray-400">{formatDate(payout.requestedAt)}</td>
                     <td className="px-6 py-4 text-gray-400">{payout.phoneNumber || 'N/A'}</td>
+                    <td className="px-6 py-4 text-gray-400 text-xs">
+                      {payout.mpesaReceiptNumber || payout.failReason || '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>

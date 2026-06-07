@@ -10,7 +10,7 @@ export default function Withdraw() {
   const { profile } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [amount, setAmount] = useState(10000);
+  const [amount, setAmount] = useState(5000);
   const [phone, setPhone] = useState(profile?.phoneNumber || '');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
@@ -32,7 +32,7 @@ export default function Withdraw() {
 
   const handleWithdraw = async (e) => {
     e.preventDefault();
-    if (amount < 10000) return;
+    if (amount < 10) return;
     
     // Tier checks
     const tier = data.trader.withdrawalBotTier;
@@ -86,12 +86,12 @@ export default function Withdraw() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-500 uppercase mb-2">Withdrawable Amount (Min KSh 10,000)</label>
+              <label className="block text-xs font-medium text-gray-500 uppercase mb-2">Withdrawable Amount (Min KSh 10)</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">KSh</span>
                 <input
                   type="number"
-                  min="10000"
+                  min="10"
                   value={amount}
                   onChange={(e) => setAmount(Number(e.target.value))}
                   className="w-full bg-black/40 border border-white/10 rounded-2xl pl-14 pr-4 py-4 text-xl text-white focus:border-[#87ceeb] outline-none transition-all"
@@ -176,7 +176,7 @@ export default function Withdraw() {
             <h3 className="font-bold text-white mb-4">Security Rules</h3>
             <ul className="space-y-3">
               {[
-                'Minimum withdrawal amount is KSh 10,000.',
+                'Minimum withdrawal amount is KSh 10.',
                 'You must have an active withdrawal bot.',
                 'Large withdrawals may require extra verification.',
                 'Ensure your M-Pesa number is correct. Transfers are final.'
