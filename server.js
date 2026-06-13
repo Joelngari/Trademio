@@ -25,6 +25,7 @@ import nodemailer from 'nodemailer';
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
 
 // Rate limiters
@@ -324,28 +325,42 @@ app.get('/api/payments/status/:checkoutRequestId', authMiddleware, async (req, r
 });
 
 app.post('/api/payments/callback', async (req, res) => {
+  console.log('STK callback endpoint hit', {
+    method: req.method,
+    path: req.path,
+    signature: Boolean(req.headers['x-daraja-signature']),
+    bodyKeys: Object.keys(req.body || {})
+  });
+
   // IP whitelist check (if configured)
-  const allowedIps = process.env.DARAJA_CALLBACK_ALLOWED_IPS?.split(',').map(ip => ip.trim()) || [];
+  const allowedIps = (process.env.DARAJA_CALLBACK_ALLOWED_IPS || '')
+    .split(',')
+    .map(ip => ip.trim())
+    .filter(Boolean);
   const clientIp = req.ip || req.headers['x-forwarded-for'];
   
   if (allowedIps.length > 0 && !allowedIps.includes(clientIp)) {
-    console.warn(`Callback rejected: unauthorized IP ${clientIp}`);
+    console.warn(`Callback rejected: unauthorized IP ${clientIp}`, { allowedIps });
     return res.status(403).json({ message: 'Forbidden' });
   }
 
-  // Verify HMAC-SHA256 signature
+  // Verify HMAC-SHA256 signature only if a callback secret is configured
   const signature = req.headers['x-daraja-signature'] || '';
   const callbackSecret = process.env.DARAJA_CALLBACK_SECRET;
-  
-  if (!callbackSecret) {
-    console.error('DARAJA_CALLBACK_SECRET not configured');
-    return res.status(500).json({ message: 'Server misconfiguration' });
+
+  if (callbackSecret) {
+    const rawBody = JSON.stringify(req.body);
+    if (!verifyCallbackSignature(rawBody, signature, callbackSecret)) {
+      console.warn('Callback rejected: invalid signature');
+      return res.status(401).json({ message: 'Invalid signature' });
+    }
+  } else if (signature) {
+    console.warn('Callback signature header present but DARAJA_CALLBACK_SECRET is not configured; skipping signature validation.');
   }
 
-  const rawBody = JSON.stringify(req.body);
-  if (!verifyCallbackSignature(rawBody, signature, callbackSecret)) {
-    console.warn('Callback rejected: invalid signature');
-    return res.status(401).json({ message: 'Invalid signature' });
+  if (!req.body || !req.body.Body || !req.body.Body.stkCallback) {
+    console.warn('Invalid STK callback payload received', JSON.stringify(req.body).slice(0, 2000));
+    return res.status(400).json({ message: 'Invalid callback payload' });
   }
 
   const { Body } = req.body;
@@ -363,7 +378,7 @@ app.post('/api/payments/callback', async (req, res) => {
   try {
     const processed = await isCallbackProcessed(adminDb, checkoutRequestId);
     if (processed) {
-      console.log('Callback already processed:', checkoutRequestId);
+      console.log('Callback already processed:', checkoutRequestId, { resultCode: stkCallback.ResultCode });
       return res.status(409).json({ message: 'Already processed' });
     }
   } catch (err) {
@@ -372,6 +387,7 @@ app.post('/api/payments/callback', async (req, res) => {
   }
 
   const resultCode = stkCallback.ResultCode;
+  console.log('Processing STK callback', { checkoutRequestId, resultCode });
 
   try {
     const transactions = await adminDb.collection('transactions')
@@ -389,11 +405,11 @@ app.post('/api/payments/callback', async (req, res) => {
     const transData = transactionDoc.data();
 
     if (resultCode === 0) {
-      // Success: mark as processed before making DB updates
-      await markCallbackProcessed(adminDb, checkoutRequestId);
-      
       const mpesaReceiptNumber = stkCallback.CallbackMetadata.Item.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
+      console.log('STK callback success, updating transaction', { checkoutRequestId, mpesaReceiptNumber });
+
       const splitResult = await handleSuccessfulPayment(transactionDoc.ref, transData, mpesaReceiptNumber);
+      await markCallbackProcessed(adminDb, checkoutRequestId);
 
       try {
         const traderDoc = await adminDb.collection('traders').doc(transData.traderId).get();
@@ -409,9 +425,9 @@ app.post('/api/payments/callback', async (req, res) => {
 
       res.status(200).json(splitResult);
     } else {
-      // Failure: mark as processed
-      await markCallbackProcessed(adminDb, checkoutRequestId);
+      console.warn('STK callback failure result code, marking transaction failed', { checkoutRequestId, resultCode });
       await transactionDoc.ref.update({ status: 'failed' });
+      await markCallbackProcessed(adminDb, checkoutRequestId);
       res.status(200).json({ message: 'Transaction failed' });
     }
   } catch (error) {
@@ -422,6 +438,28 @@ app.post('/api/payments/callback', async (req, res) => {
 
 async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) {
   return await adminDb.runTransaction(async (t) => {
+    const marketerId = transData.marketerId;
+    let marketerCut = 0;
+    let adminCut = transData.totalAmount;
+    let marketerRef;
+    let marketerDoc;
+    let pkg;
+
+    if (marketerId !== 'ADMIN') {
+      marketerCut = transData.totalAmount * 0.85;
+      adminCut = transData.totalAmount * 0.15;
+      marketerRef = adminDb.collection('marketers').doc(marketerId);
+      marketerDoc = await t.get(marketerRef);
+    }
+
+    const traderRef = adminDb.collection('traders').doc(transData.traderId);
+    let pkgRef;
+    if (['forex', 'crypto', 'mining', 'investment', 'lifespan', 'withdrawal-bot'].includes(transData.type)) {
+      pkgRef = adminDb.collection('packages').doc(transData.metadata.packageId);
+      const pkgDoc = await t.get(pkgRef);
+      pkg = pkgDoc.exists ? pkgDoc.data() : {};
+    }
+
     // 1. Update Transaction
     t.update(transRef, { 
       status: 'success', 
@@ -429,22 +467,21 @@ async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) 
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    const marketerId = transData.marketerId;
-    let marketerCut = 0;
-    let adminCut = transData.totalAmount;
-
     if (marketerId !== 'ADMIN') {
-      marketerCut = transData.totalAmount * 0.85;
-      adminCut = transData.totalAmount * 0.15;
+      if (!marketerDoc.exists) {
+        t.set(marketerRef, {
+          uid: marketerId,
+          commissionBalance: marketerCut,
+          totalEarned: marketerCut,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } else {
+        t.update(marketerRef, {
+          commissionBalance: admin.firestore.FieldValue.increment(marketerCut),
+          totalEarned: admin.firestore.FieldValue.increment(marketerCut)
+        });
+      }
 
-      // 2. Update Marketer
-      const marketerRef = adminDb.collection('marketers').doc(marketerId);
-      t.update(marketerRef, {
-        commissionBalance: admin.firestore.FieldValue.increment(marketerCut),
-        totalEarned: admin.firestore.FieldValue.increment(marketerCut)
-      });
-
-      // 3. Record Commission
       const commissionRef = adminDb.collection('commissions').doc();
       t.set(commissionRef, {
         id: commissionRef.id,
@@ -458,18 +495,12 @@ async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) 
       });
     }
 
-    // 4. Activate Logic based on type
-    const traderRef = adminDb.collection('traders').doc(transData.traderId);
     if (transData.type === 'deposit') {
       t.update(traderRef, {
         depositBalance: admin.firestore.FieldValue.increment(transData.totalAmount),
         totalDeposited: admin.firestore.FieldValue.increment(transData.totalAmount)
       });
     } else if (['forex', 'crypto', 'mining', 'investment', 'lifespan'].includes(transData.type)) {
-      const pkgRef = adminDb.collection('packages').doc(transData.metadata.packageId);
-      const pkgDoc = await pkgRef.get();
-      const pkg = pkgDoc.data();
-
       let durationMs = (pkg.duration || 60) * 60 * 1000;
       if (transData.type === 'investment' || transData.type === 'lifespan') {
          durationMs = (pkg.duration || 1) * 24 * 60 * 60 * 1000;
@@ -499,14 +530,10 @@ async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) 
       t.set(sessionRef, sessionData);
       t.update(traderRef, { activeSessionId: sessionRef.id });
     } else if (transData.type === 'withdrawal-bot') {
-       const pkgRef = adminDb.collection('packages').doc(transData.metadata.packageId);
-       const pkgDoc = await pkgRef.get();
-       const pkg = pkgDoc.data();
-       
-       t.update(traderRef, {
-         withdrawalBotTier: pkg.tier,
-         withdrawalBotMaxAmount: pkg.maxAmount
-       });
+      t.update(traderRef, {
+        withdrawalBotTier: pkg.tier,
+        withdrawalBotMaxAmount: pkg.maxAmount
+      });
     }
 
     invalidateCache('traders', 'marketers', 'transactions', 'commissions', 'sessions');
@@ -1590,10 +1617,15 @@ app.post('/api/payouts/marketer', authMiddleware, roleMiddleware(['marketer']), 
     const payoutResult = await adminDb.runTransaction(async (t) => {
       const marketerRef = adminDb.collection('marketers').doc(marketerId);
       const marketerDoc = await t.get(marketerRef);
-      const marketer = marketerDoc.data();
-
-      if (amount > marketer.commissionBalance) {
-        throw new Error('Insufficient balance');
+      let marketer = marketerDoc.exists ? marketerDoc.data() : null;
+      if (!marketer) {
+        t.set(marketerRef, {
+          uid: marketerId,
+          commissionBalance: 0,
+          totalEarned: 0,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        marketer = { commissionBalance: 0, totalEarned: 0 };
       }
 
       // Deduct balance first

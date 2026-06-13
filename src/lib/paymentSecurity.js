@@ -29,8 +29,24 @@ export function verifyCallbackSignature(payload, signature, secret) {
  */
 export function validateTimestamp(timestamp, maxAgeSec = 300) {
   if (!timestamp) return false;
+
+  let ts = timestamp;
+  if (typeof ts === 'string') {
+    if (/^\d{14}$/.test(ts)) {
+      ts = Date.parse(`${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}T${ts.slice(8, 10)}:${ts.slice(10, 12)}:${ts.slice(12, 14)}Z`);
+    } else {
+      ts = Number(ts);
+    }
+  }
+
+  if (typeof ts === 'number' && ts < 1e12) {
+    ts = ts * 1000;
+  }
+
+  if (Number.isNaN(ts)) return false;
+
   const now = Date.now();
-  const callbackAge = (now - timestamp) / 1000;
+  const callbackAge = (now - ts) / 1000;
   return callbackAge >= 0 && callbackAge <= maxAgeSec;
 }
 
