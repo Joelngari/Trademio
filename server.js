@@ -9,6 +9,7 @@ import { createServer as createViteServer } from 'vite';
 import admin, { adminAuth, adminDb } from './src/lib/firebaseAdmin.js';
 import { getCollection, getCollections, invalidateCache } from './src/lib/dbCache.js';
 import { initiateStkPush, initiateB2C } from './src/lib/daraja.js';
+import { verifyCallbackSignature, validateTimestamp, isCallbackProcessed, markCallbackProcessed } from './src/lib/paymentSecurity.js';
 import { 
   registerSchema, 
   loginSchema, 
@@ -183,11 +184,12 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
 
     // Handle referral
     let marketerId = 'ADMIN';
-    if (data.referralCode) {
-      const marketerQuery = await adminDb.collection('marketers').where('referralCode', '==', data.referralCode).get();
+    const referralCode = data.referralCode && data.referralCode !== 'undefined' ? data.referralCode : null;
+    if (referralCode) {
+      const marketerQuery = await adminDb.collection('marketers').where('referralCode', '==', referralCode).get();
       if (!marketerQuery.empty) {
         marketerId = marketerQuery.docs[0].id;
-      } else if (data.referralCode === process.env.ADMIN_REFERRAL_CODE) {
+      } else if (referralCode === process.env.ADMIN_REFERRAL_CODE) {
         marketerId = 'ADMIN';
       }
     }
@@ -322,17 +324,53 @@ app.get('/api/payments/status/:checkoutRequestId', authMiddleware, async (req, r
 });
 
 app.post('/api/payments/callback', async (req, res) => {
-  const allowedIps = process.env.DARAJA_CALLBACK_ALLOWED_IPS?.split(',') || [];
+  // IP whitelist check (if configured)
+  const allowedIps = process.env.DARAJA_CALLBACK_ALLOWED_IPS?.split(',').map(ip => ip.trim()) || [];
   const clientIp = req.ip || req.headers['x-forwarded-for'];
   
   if (allowedIps.length > 0 && !allowedIps.includes(clientIp)) {
-    // In dev we might skip this
-    // return res.status(403).send('Forbidden');
+    console.warn(`Callback rejected: unauthorized IP ${clientIp}`);
+    return res.status(403).json({ message: 'Forbidden' });
+  }
+
+  // Verify HMAC-SHA256 signature
+  const signature = req.headers['x-daraja-signature'] || '';
+  const callbackSecret = process.env.DARAJA_CALLBACK_SECRET;
+  
+  if (!callbackSecret) {
+    console.error('DARAJA_CALLBACK_SECRET not configured');
+    return res.status(500).json({ message: 'Server misconfiguration' });
+  }
+
+  const rawBody = JSON.stringify(req.body);
+  if (!verifyCallbackSignature(rawBody, signature, callbackSecret)) {
+    console.warn('Callback rejected: invalid signature');
+    return res.status(401).json({ message: 'Invalid signature' });
   }
 
   const { Body } = req.body;
   const stkCallback = Body.stkCallback;
   const checkoutRequestId = stkCallback.CheckoutRequestID;
+  const callbackTimestamp = stkCallback.Timestamp || Date.now();
+  
+  // Validate timestamp (reject if older than 5 minutes)
+  if (!validateTimestamp(callbackTimestamp, 300)) {
+    console.warn('Callback rejected: stale timestamp', checkoutRequestId);
+    return res.status(400).json({ message: 'Stale request' });
+  }
+
+  // Idempotency check: prevent duplicate processing
+  try {
+    const processed = await isCallbackProcessed(adminDb, checkoutRequestId);
+    if (processed) {
+      console.log('Callback already processed:', checkoutRequestId);
+      return res.status(409).json({ message: 'Already processed' });
+    }
+  } catch (err) {
+    console.error('Idempotency check error:', err);
+    return res.status(500).json({ message: 'Internal error' });
+  }
+
   const resultCode = stkCallback.ResultCode;
 
   try {
@@ -341,15 +379,20 @@ app.post('/api/payments/callback', async (req, res) => {
       .limit(1)
       .get();
 
-    if (transactions.empty) return res.status(200).send('Transaction not found');
+    if (transactions.empty) {
+      console.warn('Transaction not found:', checkoutRequestId);
+      await markCallbackProcessed(adminDb, checkoutRequestId);
+      return res.status(200).send('Transaction not found');
+    }
 
     const transactionDoc = transactions.docs[0];
     const transData = transactionDoc.data();
 
     if (resultCode === 0) {
-      // Success
+      // Success: mark as processed before making DB updates
+      await markCallbackProcessed(adminDb, checkoutRequestId);
+      
       const mpesaReceiptNumber = stkCallback.CallbackMetadata.Item.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
-
       const splitResult = await handleSuccessfulPayment(transactionDoc.ref, transData, mpesaReceiptNumber);
 
       try {
@@ -366,7 +409,8 @@ app.post('/api/payments/callback', async (req, res) => {
 
       res.status(200).json(splitResult);
     } else {
-      // Failure
+      // Failure: mark as processed
+      await markCallbackProcessed(adminDb, checkoutRequestId);
       await transactionDoc.ref.update({ status: 'failed' });
       res.status(200).json({ message: 'Transaction failed' });
     }
@@ -981,6 +1025,8 @@ app.post('/api/admin/marketer', authMiddleware, roleMiddleware(['admin']), async
     // Create user and marketer docs
     const batch = adminDb.batch();
     const userRef = adminDb.collection('users').doc(userRecord.uid);
+    const referralCode = normalizedUsername.toUpperCase();
+    
     batch.set(userRef, {
       uid: userRecord.uid,
       name: fullName,
@@ -988,6 +1034,7 @@ app.post('/api/admin/marketer', authMiddleware, roleMiddleware(['admin']), async
       email,
       phoneNumber: phoneNumber || null,
       role: 'marketer',
+      referralCode: referralCode,
       status: 'active',
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
@@ -995,7 +1042,6 @@ app.post('/api/admin/marketer', authMiddleware, roleMiddleware(['admin']), async
     const marketerRef = adminDb.collection('marketers').doc(userRecord.uid);
     batch.set(marketerRef, {
       uid: userRecord.uid,
-      referralCode: normalizedUsername.toUpperCase(),
       commissionBalance: 0,
       totalEarned: 0,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -1115,6 +1161,44 @@ app.get('/api/admin/settings', authMiddleware, roleMiddleware(['admin']), async 
     const settings = await adminDb.collection('settings').doc('platform').get();
     res.json(settings.data() || {});
   } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Fix missing referral codes for marketers (admin only - utility endpoint)
+app.post('/api/admin/fix-referral-codes', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const marketers = await adminDb.collection('users').where('role', '==', 'marketer').get();
+    let updated = 0;
+
+    for (const doc of marketers.docs) {
+      const data = doc.data();
+      if (!data.referralCode) {
+        const referralCode = data.username.toUpperCase();
+        await adminDb.collection('users').doc(doc.id).update({
+          referralCode: referralCode
+        });
+        
+        // Also create/update marketers doc if missing
+        const marketerDocRef = adminDb.collection('marketers').doc(doc.id);
+        const marketerDocSnap = await marketerDocRef.get();
+        if (!marketerDocSnap.exists) {
+          await marketerDocRef.set({
+            uid: doc.id,
+            commissionBalance: 0,
+            totalEarned: 0,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
+        
+        updated++;
+      }
+    }
+
+    invalidateCache('users', 'marketers');
+    res.json({ message: `Fixed ${updated} marketer(s) with missing referral codes` });
+  } catch (error) {
+    console.error('Fix referral codes error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -1248,6 +1332,52 @@ app.put('/api/admin/trader/:id', authMiddleware, roleMiddleware(['admin']), asyn
   }
 });
 
+// Promote trader to marketer (admin only)
+app.post('/api/admin/promote-to-marketer/:id', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const traderDoc = await adminDb.collection('users').doc(id).get();
+    
+    if (!traderDoc.exists) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const userData = traderDoc.data();
+    if (userData.role === 'marketer') {
+      return res.status(400).json({ message: 'User is already a marketer' });
+    }
+
+    // Generate referral code from username
+    const referralCode = userData.username.toUpperCase();
+
+    // Update users collection with role and referral code
+    await adminDb.collection('users').doc(id).update({
+      role: 'marketer',
+      referralCode: referralCode,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Create marketers collection document (commissions only)
+    await adminDb.collection('marketers').doc(id).set({
+      uid: id,
+      commissionBalance: 0,
+      totalEarned: 0,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    invalidateCache('users', 'marketers', 'traders');
+
+    res.json({ 
+      message: 'Trader promoted to marketer successfully', 
+      uid: id, 
+      referralCode: referralCode 
+    });
+  } catch (error) {
+    console.error('Promote to marketer error:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
 // --- CRON JOB (Session Completion) ---
 
 cron.schedule('*/10 * * * * *', async () => {
@@ -1368,26 +1498,35 @@ async function seedDatabase() {
 }
 
 async function seedAdminUser() {
-  const adminEmail = 'joelgitonga79@gmail.com';
-  const adminPassword = process.env.ADMIN_SEED_PASSWORD || 'Trd@2023!';
-  const adminUsername = 'adminjoel';
-  const adminPhoneNumber = '0113623027';
-  const adminFullName = 'Admin Joel';
+  // Only create admin if explicit env vars are set. Prevents accidental admin creation.
+  // To create initial admin: set INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD in .env
+  // then restart server once. Remove env vars afterward for security.
+  const adminEmail = process.env.INITIAL_ADMIN_EMAIL;
+  const adminPassword = process.env.INITIAL_ADMIN_PASSWORD;
+  
+  if (!adminEmail || !adminPassword) {
+    console.log('ℹ  Admin seeding skipped (INITIAL_ADMIN_EMAIL and/or INITIAL_ADMIN_PASSWORD not set).');
+    console.log('   To create admin: set both env vars, restart server, then remove from .env for security.');
+    console.log('   Alternative: Use Firebase Admin SDK to promote an existing user or create via Firebase Console.');
+    return;
+  }
+
+  const adminUsername = 'admin';
+  const adminPhoneNumber = process.env.ADMIN_PHONE_NUMBER || '0000000000';
+  const adminFullName = process.env.ADMIN_FULL_NAME || 'Administrator';
 
   let userRecord;
   try {
     userRecord = await adminAuth.getUserByEmail(adminEmail);
-    await adminAuth.updateUser(userRecord.uid, {
-      password: adminPassword,
-      displayName: adminFullName
-    });
+    console.log('ℹ  Admin user already exists.');
   } catch (err) {
-    if (err.code === 'auth/user-not-found' || err.code === 'auth/user-not-found') {
+    if (err.code === 'auth/user-not-found') {
       userRecord = await adminAuth.createUser({
         email: adminEmail,
         password: adminPassword,
         displayName: adminFullName
       });
+      console.log('✓ Admin user created:', adminEmail);
     } else {
       throw err;
     }

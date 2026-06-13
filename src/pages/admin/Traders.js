@@ -108,6 +108,36 @@ export default function AdminTraders() {
     }
   };
 
+  const handlePromoteToMarketer = async () => {
+    if (!traderDetails) return;
+    
+    const confirm = window.confirm(`Promote ${traderDetails.name} to marketer?\n\nReferral Code: ${traderDetails.username.toUpperCase()}`);
+    if (!confirm) return;
+
+    try {
+      const token = await auth.currentUser.getIdToken();
+      const res = await fetch(`/api/admin/promote-to-marketer/${traderDetails.id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || 'Failed to promote trader');
+      }
+
+      const data = await res.json();
+      alert(`${traderDetails.name} promoted to marketer!\nReferral Code: ${data.referralCode}`);
+      setSelectedTrader(null);
+      setTraderDetails(null);
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
   const filtered = traders.filter(t => 
     t.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     t.username.toLowerCase().includes(searchTerm.toLowerCase())
@@ -321,6 +351,16 @@ export default function AdminTraders() {
                       className="w-full bg-[#87ceeb] text-[#0a0a0a] py-3 rounded-xl font-bold hover:bg-[#76b9d6] transition-all"
                     >
                       Save Changes
+                    </button>
+                  )}
+
+                  {/* Promote Button */}
+                  {!isEditing && traderDetails.role === 'trader' && (
+                    <button 
+                      onClick={handlePromoteToMarketer}
+                      className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold hover:bg-purple-700 transition-all"
+                    >
+                      Promote to Marketer
                     </button>
                   )}
                 </>

@@ -71,8 +71,12 @@ function PrivateRoute({ children, allowedRoles }) {
   if (loading) return <SkeletonLoader type="card" />;
   if (!user) return <Navigate to="/login" replace />;
   if (allowedRoles && !allowedRoles.includes(role)) {
-    // Redirect to their correct dashboard
-    return <Navigate to={`/${role}/home`} replace />;
+    // Only redirect if role is known; don't redirect to /null/home or /undefined/home
+    if (role) {
+      return <Navigate to={`/${role}/home`} replace />;
+    }
+    // If role is not yet available, show loading state instead of redirecting
+    return <SkeletonLoader type="card" />;
   }
 
   return <DashboardLayout>{children}</DashboardLayout>;
@@ -81,14 +85,14 @@ function PrivateRoute({ children, allowedRoles }) {
 export default function App() {
   const { user, role, loading } = useAuth();
 
-  if (loading) return null;
+  if (loading) return <SkeletonLoader type="card" />;
 
   return (
     <ErrorBoundary>
       <Routes>
       {/* Auth Routes */}
-      <Route path="/login" element={user ? <Navigate to={`/${role}/home`} replace /> : <Login />} />
-      <Route path="/register" element={user ? <Navigate to={`/${role}/home`} replace /> : <Register />} />
+      <Route path="/login" element={user && role ? <Navigate to={`/${role}/home`} replace /> : <Login />} />
+      <Route path="/register" element={user && role ? <Navigate to={`/${role}/home`} replace /> : <Register />} />
 
       {/* Trader Routes */}
       <Route path="/trader/*" element={<PrivateRoute allowedRoles={['trader']}><Routes>

@@ -22,7 +22,13 @@ export default function MarketerHome() {
     return () => unsub();
   }, [user.uid]);
 
-  const referralLink = `https://${window.location.host}/register?ref=${marketerData?.referralCode}`;
+  const referralLink = profile?.referralCode
+    ? `https://${window.location.host}/register?ref=${profile.referralCode}`
+    : profile?.username
+    ? `https://${window.location.host}/register?ref=${profile.username.toUpperCase()}`
+    : `https://${window.location.host}/register`;
+
+  const displayReferralCode = profile?.referralCode || profile?.username?.toUpperCase() || 'PENDING';
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(referralLink);
@@ -59,7 +65,7 @@ export default function MarketerHome() {
            </div>
            <div>
               <p className="text-[10px] text-gray-500 uppercase font-bold">Referral Code</p>
-              <p className="text-sm font-bold text-white uppercase tracking-widest">{marketerData?.referralCode || 'PENDING'}</p>
+              <p className="text-sm font-bold text-white uppercase tracking-widest">{displayReferralCode}</p>
            </div>
         </div>
       </div>

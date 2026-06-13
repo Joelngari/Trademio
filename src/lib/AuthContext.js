@@ -9,9 +9,11 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const isMountedRef = React.useRef(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+      if (!isMountedRef.current) return;
       setLoading(true);
       if (authUser) {
         setUser(authUser);
@@ -19,36 +21,39 @@ export function AuthProvider({ children }) {
         // Use a snapshot listener for real-time updates (like suspension)
         const profileRef = doc(db, 'users', authUser.uid);
         const unsubProfile = onSnapshot(profileRef, (docSnap) => {
+          if (!isMountedRef.current) return;
           if (docSnap.exists()) {
             setProfile(docSnap.data());
           } else {
-            // Profile doesn't exist yet, set empty profile but don't error
             setProfile(null);
           }
           setLoading(false);
         }, (error) => {
+          if (!isMountedRef.current) return;
           console.warn("Error fetching profile:", error);
-          // Set profile to null but keep user logged in
-          // This prevents infinite loops on permission errors
           setProfile(null);
           setLoading(false);
         });
 
         return () => unsubProfile();
       } else {
+        if (!isMountedRef.current) return;
         setUser(null);
         setProfile(null);
         setLoading(false);
       }
     });
 
-    return unsubscribe;
+    return () => {
+      isMountedRef.current = false;
+      unsubscribe();
+    };
   }, []);
 
   const value = {
     user,
     profile,
-    role: profile?.role || null,
+    role: profile?.role || undefined,
     status: profile?.status || 'active',
     loading
   };

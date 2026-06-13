@@ -28,7 +28,8 @@ export default function Register() {
     setLoading(true);
     setError('');
 
-    const referralCode = searchParams.get('ref') || 'VELNIX-ADMIN';
+    const rawReferral = searchParams.get('ref');
+    const referralCode = rawReferral && rawReferral !== 'undefined' ? rawReferral : 'VELNIX-ADMIN';
 
     try {
       // Use backend for registration to handle unique username and referral link
