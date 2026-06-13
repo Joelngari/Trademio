@@ -22,13 +22,15 @@ export default function MarketerHome() {
     return () => unsub();
   }, [user.uid]);
 
-  const referralLink = profile?.referralCode
-    ? `https://${window.location.host}/register?ref=${profile.referralCode}`
-    : profile?.username
-    ? `https://${window.location.host}/register?ref=${profile.username.toUpperCase()}`
-    : `https://${window.location.host}/register`;
+   // Treat literal 'undefined' as missing (can happen from manual edits)
+   const safeReferralCode = profile?.referralCode && profile.referralCode !== 'undefined' ? profile.referralCode : null;
+   const referralLink = safeReferralCode
+      ? `https://${window.location.host}/register?ref=${safeReferralCode}`
+      : profile?.username
+      ? `https://${window.location.host}/register?ref=${profile.username.toUpperCase()}`
+      : `https://${window.location.host}/register`;
 
-  const displayReferralCode = profile?.referralCode || profile?.username?.toUpperCase() || 'PENDING';
+   const displayReferralCode = safeReferralCode || profile?.username?.toUpperCase() || 'PENDING';
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(referralLink);

@@ -79,7 +79,7 @@ export default class ErrorBoundary extends React.Component {
 
     // Use a key which increments on retry to force remounting descendants
     return (
-      <React.Fragment key={this.state.recoveryKey}>
+      <React.Fragment key={this.props.resetKey ?? this.state.recoveryKey}>
         {this.props.children}
       </React.Fragment>
     );

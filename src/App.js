@@ -1,5 +1,5 @@
 import React, { useState, Suspense, lazy } from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from './lib/AuthContext.js';
 import ErrorBoundary from './components/ErrorBoundary.js';
 import Sidebar from './components/Sidebar.js';
@@ -64,9 +64,8 @@ function DashboardLayout({ children }) {
   );
 }
 
-function PrivateRoute({ children, allowedRoles }) {
+function PrivateRoute({ allowedRoles }) {
   const { user, role, loading } = useAuth();
-  const location = useLocation();
 
   if (loading) return <SkeletonLoader type="card" />;
   if (!user) return <Navigate to="/login" replace />;
@@ -79,62 +78,67 @@ function PrivateRoute({ children, allowedRoles }) {
     return <SkeletonLoader type="card" />;
   }
 
-  return <DashboardLayout>{children}</DashboardLayout>;
+  return (
+    <DashboardLayout>
+      <Outlet />
+    </DashboardLayout>
+  );
 }
 
 export default function App() {
   const { user, role, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) return <SkeletonLoader type="card" />;
 
   return (
-    <ErrorBoundary>
+    <ErrorBoundary resetKey={location.pathname}>
       <Routes>
-      {/* Auth Routes */}
-      <Route path="/login" element={user && role ? <Navigate to={`/${role}/home`} replace /> : <Login />} />
-      <Route path="/register" element={user && role ? <Navigate to={`/${role}/home`} replace /> : <Register />} />
+        {/* Auth Routes */}
+        <Route path="/login" element={user && role ? <Navigate to={`/${role}/home`} replace /> : <Login />} />
+        <Route path="/register" element={user && role ? <Navigate to={`/${role}/home`} replace /> : <Register />} />
 
-      {/* Trader Routes */}
-      <Route path="/trader/*" element={<PrivateRoute allowedRoles={['trader']}><Routes>
-        <Route path="home" element={<TraderHome />} />
-        <Route path="forex" element={<ForexBot />} />
-        <Route path="crypto" element={<CryptoBot />} />
-        <Route path="mining" element={<Mining />} />
-        <Route path="investment" element={<Investment />} />
-        <Route path="lifespan" element={<Lifespan />} />
-        <Route path="trades" element={<Trades />} />
-        <Route path="deposit" element={<Deposit />} />
-        <Route path="withdraw" element={<Withdraw />} />
-        <Route path="withdrawal-bot" element={<WithdrawalBot />} />
-        <Route path="payment-history" element={<PaymentHistory />} />
-        <Route path="earnings-history" element={<EarningsHistory />} />
-      </Routes></PrivateRoute>} />
+        {/* Trader Routes */}
+        <Route path="/trader/*" element={<PrivateRoute allowedRoles={['trader']} />}>
+          <Route path="home" element={<TraderHome />} />
+          <Route path="forex" element={<ForexBot />} />
+          <Route path="crypto" element={<CryptoBot />} />
+          <Route path="mining" element={<Mining />} />
+          <Route path="investment" element={<Investment />} />
+          <Route path="lifespan" element={<Lifespan />} />
+          <Route path="trades" element={<Trades />} />
+          <Route path="deposit" element={<Deposit />} />
+          <Route path="withdraw" element={<Withdraw />} />
+          <Route path="withdrawal-bot" element={<WithdrawalBot />} />
+          <Route path="payment-history" element={<PaymentHistory />} />
+          <Route path="earnings-history" element={<EarningsHistory />} />
+        </Route>
 
-      {/* Marketer Routes */}
-      <Route path="/marketer/*" element={<PrivateRoute allowedRoles={['marketer']}><Routes>
-        <Route path="home" element={<MarketerHome />} />
-        <Route path="traders" element={<MyTraders />} />
-        <Route path="commissions" element={<CommissionHistory />} />
-        <Route path="withdraw" element={<MarketerWithdraw />} />
-        <Route path="withdrawals" element={<WithdrawalHistory />} />
-      </Routes></PrivateRoute>} />
+        {/* Marketer Routes */}
+        <Route path="/marketer/*" element={<PrivateRoute allowedRoles={['marketer']} />}>
+          <Route path="home" element={<MarketerHome />} />
+          <Route path="traders" element={<MyTraders />} />
+          <Route path="commissions" element={<CommissionHistory />} />
+          <Route path="withdraw" element={<MarketerWithdraw />} />
+          <Route path="withdrawals" element={<WithdrawalHistory />} />
+        </Route>
 
-      {/* Admin Routes */}
-      <Route path="/admin/*" element={<PrivateRoute allowedRoles={['admin']}><Routes>
-        <Route path="home" element={<AdminHome />} />
-        <Route path="traders" element={<AdminTraders />} />
-        <Route path="marketers" element={<AdminMarketers />} />
-        <Route path="sessions" element={<ActiveSessions />} />
-        <Route path="withdrawals" element={<WithdrawalRequests />} />
-        <Route path="marketer-payouts" element={<MarketerPayouts />} />
-        <Route path="transactions" element={<AdminTransactions />} />
-        <Route path="packages" element={<AdminPackages />} />
-        <Route path="settings" element={<AdminSettings />} />
-      </Routes></PrivateRoute>} />
+        {/* Admin Routes */}
+        <Route path="/admin/*" element={<PrivateRoute allowedRoles={['admin']} />}>
+          <Route path="home" element={<AdminHome />} />
+          <Route path="traders" element={<AdminTraders />} />
+          <Route path="marketers" element={<AdminMarketers />} />
+          <Route path="sessions" element={<ActiveSessions />} />
+          <Route path="withdrawals" element={<WithdrawalRequests />} />
+          <Route path="marketer-payouts" element={<MarketerPayouts />} />
+          <Route path="transactions" element={<AdminTransactions />} />
+          <Route path="packages" element={<AdminPackages />} />
+          <Route path="settings" element={<AdminSettings />} />
+        </Route>
 
-      {/* Default Route */}
-      <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Default Route */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </ErrorBoundary>
   );

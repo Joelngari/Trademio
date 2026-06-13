@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
   const isMountedRef = React.useRef(true);
 
   useEffect(() => {
+    let unsubProfile = null;
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
       if (!isMountedRef.current) return;
       setLoading(true);
@@ -20,7 +21,7 @@ export function AuthProvider({ children }) {
         
         // Use a snapshot listener for real-time updates (like suspension)
         const profileRef = doc(db, 'users', authUser.uid);
-        const unsubProfile = onSnapshot(profileRef, (docSnap) => {
+        unsubProfile = onSnapshot(profileRef, (docSnap) => {
           if (!isMountedRef.current) return;
           if (docSnap.exists()) {
             setProfile(docSnap.data());
@@ -34,8 +35,6 @@ export function AuthProvider({ children }) {
           setProfile(null);
           setLoading(false);
         });
-
-        return () => unsubProfile();
       } else {
         if (!isMountedRef.current) return;
         setUser(null);
@@ -46,6 +45,7 @@ export function AuthProvider({ children }) {
 
     return () => {
       isMountedRef.current = false;
+      if (typeof unsubProfile === 'function') unsubProfile();
       unsubscribe();
     };
   }, []);

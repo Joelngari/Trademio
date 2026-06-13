@@ -13,6 +13,7 @@ export default function AdminMarketers() {
   const [selectedMarketer, setSelectedMarketer] = useState(null);
   const [marketerDetails, setMarketerDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
 
   useEffect(() => {
     const q = query(collection(db, 'users'), where('role', '==', 'marketer'), orderBy('createdAt', 'desc'));
@@ -44,6 +45,34 @@ export default function AdminMarketers() {
       alert('Error fetching marketer details: ' + err.message);
     } finally {
       setDetailsLoading(false);
+    }
+  };
+
+  const handleFixReferralCodes = async () => {
+    if (!window.confirm('Run the referral code fix for all marketers? This will populate missing referralCode values and create missing marketer docs.')) {
+      return;
+    }
+
+    setCleanupLoading(true);
+    try {
+      const token = await auth.currentUser.getIdToken();
+      const res = await fetch('/api/admin/fix-referral-codes', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to run referral code fix');
+      }
+
+      alert(data.message || 'Referral codes fixed successfully');
+    } catch (err) {
+      alert('Error: ' + (err.message || err));
+    } finally {
+      setCleanupLoading(false);
     }
   };
 
@@ -95,26 +124,32 @@ export default function AdminMarketers() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex flex-col gap-6">
         <div>
            <h1 className="text-3xl font-bold text-white mb-2">Marketer Management</h1>
            <p className="text-gray-400">Total of {marketers.length} active platform marketers.</p>
         </div>
-        <div className="flex gap-4">
-           <div className="relative group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-              <input 
-                type="text" 
-                placeholder="Search marketers..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-[#121212] border border-white/5 rounded-xl pl-12 pr-6 py-3 text-white focus:border-[#87ceeb] outline-none transition-all w-full md:w-64"
-              />
-           </div>
-           <button onClick={() => handleAddMarketer()} className="bg-[#87ceeb] text-[#0a0a0a] px-6 py-3 rounded-xl font-bold hover:bg-[#76b9d6] transition-all flex items-center gap-2">
-             <Plus size={18} />
-             Add Marketer
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+           <button onClick={handleFixReferralCodes} disabled={cleanupLoading} className="self-start bg-purple-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-purple-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+             <TrendingUp size={18} />
+             {cleanupLoading ? 'Fixing referrals...' : 'Fix Referrals'}
            </button>
+           <div className="flex flex-col sm:flex-row sm:items-center gap-4 w-full md:w-auto">
+             <div className="relative group flex-1 min-w-0">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                <input 
+                  type="text" 
+                  placeholder="Search marketers..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="bg-[#121212] border border-white/5 rounded-xl pl-12 pr-6 py-3 text-white focus:border-[#87ceeb] outline-none transition-all w-full md:w-64"
+                />
+             </div>
+             <button onClick={() => handleAddMarketer()} className="bg-[#87ceeb] text-[#0a0a0a] px-6 py-3 rounded-xl font-bold hover:bg-[#76b9d6] transition-all flex items-center gap-2">
+               <Plus size={18} />
+               Add Marketer
+             </button>
+           </div>
         </div>
       </div>
 
@@ -134,7 +169,7 @@ export default function AdminMarketers() {
               {filtered.map((t) => (
                 <tr key={t.id} className="hover:bg-white/[0.01] transition-colors">
                   <td className="px-6 py-4 font-bold text-white">{t.name}</td>
-                  <td className="px-6 py-4 font-bold text-[#87ceeb] tracking-widest">{t.referralCode || 'ADMIN'}</td>
+                  <td className="px-6 py-4 font-bold text-[#87ceeb] tracking-widest">{(t.referralCode && t.referralCode !== 'undefined') ? t.referralCode : 'ADMIN'}</td>
                   <td className="px-6 py-4">
                     <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${t.status === 'active' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
                       {t.status}

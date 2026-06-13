@@ -48,8 +48,14 @@ export default function Sidebar({ isOpen, setIsOpen }) {
 
   const links = role === 'admin' ? adminLinks : role === 'marketer' ? marketerLinks : traderLinks;
 
-  const handleLogout = () => {
-    auth.signOut();
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+      window.location.href = '/login';
+    } catch (err) {
+      console.error('Logout failed', err);
+      window.showAppError?.('Logout failed. Please refresh and try again.');
+    }
   };
 
   return (
