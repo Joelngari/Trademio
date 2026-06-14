@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { auth } from '../../lib/firebase.js';
 import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -58,6 +59,7 @@ export default function Login() {
               type="email"
               name="email"
               required
+              value={formData.email}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#87ceeb] focus:ring-1 focus:ring-[#87ceeb] transition-all outline-none"
               placeholder="john@example.com"
               onChange={handleChange}
@@ -66,14 +68,25 @@ export default function Login() {
 
           <div>
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Password</label>
-            <input
-              type="password"
-              name="password"
-              required
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#87ceeb] focus:ring-1 focus:ring-[#87ceeb] transition-all outline-none"
-              placeholder="••••••••"
-              onChange={handleChange}
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                required
+                value={formData.password}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 pr-10 text-white focus:border-[#87ceeb] focus:ring-1 focus:ring-[#87ceeb] transition-all outline-none"
+                placeholder="••••••••"
+                onChange={handleChange}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-white"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center justify-between">
@@ -92,7 +105,7 @@ export default function Login() {
               </div>
               <span className="text-sm text-gray-400 group-hover:text-gray-300">Remember me</span>
             </label>
-            <Link to="/register" className="text-sm text-[#87ceeb] hover:underline">Forgot Password?</Link>
+            <Link to="/forgot-password" className="text-sm text-[#87ceeb] hover:underline">Forgot Password?</Link>
           </div>
 
           <button

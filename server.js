@@ -7,6 +7,18 @@ import cors from 'cors';
 // import dotenv from 'dotenv'; // already imported above
 import { createServer as createViteServer } from 'vite';
 import admin, { adminAuth, adminDb } from './src/lib/firebaseAdmin.js';
+
+const npmLifecycleEvent = process.env.npm_lifecycle_event;
+const isDevLifecycle = npmLifecycleEvent === 'dev';
+if (isDevLifecycle) {
+  process.env.NODE_ENV = 'development';
+}
+
+console.log('Server startup:', {
+  npmLifecycleEvent,
+  NODE_ENV: process.env.NODE_ENV,
+  isDevLifecycle,
+});
 import { getCollection, getCollections, invalidateCache } from './src/lib/dbCache.js';
 import { initiateStkPush, initiateB2C } from './src/lib/daraja.js';
 import { verifyCallbackSignature, validateTimestamp, isCallbackProcessed, markCallbackProcessed } from './src/lib/paymentSecurity.js';

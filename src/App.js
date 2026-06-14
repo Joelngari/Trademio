@@ -10,6 +10,7 @@ import SkeletonLoader from './components/SkeletonLoader.js';
 // Auth Pages
 const Login = lazy(() => import('./pages/auth/Login.js'));
 const Register = lazy(() => import('./pages/auth/Register.js'));
+const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword.js'));
 
 // Trader Pages
 const TraderHome = lazy(() => import('./pages/trader/Home.js'));
@@ -98,6 +99,7 @@ export default function App() {
           {/* Auth Routes */}
           <Route path="/login" element={user && role ? <Navigate to={`/${role}/home`} replace /> : <Login />} />
           <Route path="/register" element={user && role ? <Navigate to={`/${role}/home`} replace /> : <Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
 
           {/* Trader Routes */}
           <Route path="/trader/*" element={<PrivateRoute allowedRoles={['trader']} />}>

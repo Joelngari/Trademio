@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
   const isMountedRef = React.useRef(true);
 
   useEffect(() => {
+    isMountedRef.current = true;
     let unsubProfile = null;
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
       if (!isMountedRef.current) return;
@@ -60,7 +61,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 }

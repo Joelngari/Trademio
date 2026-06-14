@@ -4,13 +4,14 @@ import { auth, db } from '../../lib/firebase.js';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { authApi } from '../../services/api.js';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
 
 export default function Register() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
     username: '',
@@ -68,6 +69,7 @@ export default function Register() {
               type="text"
               name="fullName"
               required
+              value={formData.fullName}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#87ceeb] focus:ring-1 focus:ring-[#87ceeb] transition-all outline-none"
               placeholder="John Doe"
               onChange={handleChange}
@@ -81,6 +83,7 @@ export default function Register() {
               name="username"
               required
               minLength={5}
+              value={formData.username}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#87ceeb] focus:ring-1 focus:ring-[#87ceeb] transition-all outline-none"
               placeholder="johndoe_trader"
               onChange={handleChange}
@@ -93,6 +96,7 @@ export default function Register() {
               type="email"
               name="email"
               required
+              value={formData.email}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#87ceeb] focus:ring-1 focus:ring-[#87ceeb] transition-all outline-none"
               placeholder="john@example.com"
               onChange={handleChange}
@@ -105,6 +109,7 @@ export default function Register() {
               type="text"
               name="phoneNumber"
               required
+              value={formData.phoneNumber}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#87ceeb] focus:ring-1 focus:ring-[#87ceeb] transition-all outline-none"
               placeholder="2547XXXXXXXX"
               onChange={handleChange}
@@ -113,15 +118,26 @@ export default function Register() {
 
           <div>
             <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Password</label>
-            <input
-              type="password"
-              name="password"
-              required
-              minLength={6}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#87ceeb] focus:ring-1 focus:ring-[#87ceeb] transition-all outline-none"
-              placeholder="••••••••"
-              onChange={handleChange}
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                required
+                minLength={6}
+                value={formData.password}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 pr-10 text-white focus:border-[#87ceeb] focus:ring-1 focus:ring-[#87ceeb] transition-all outline-none"
+                placeholder="••••••••"
+                onChange={handleChange}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-white"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           <button

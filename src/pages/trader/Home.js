@@ -445,11 +445,11 @@ function TradingViewMarketOverview() {
       ]
     });
 
-    container.current.innerHTML = '';
+    if (container.current) container.current.innerHTML = '';
     container.current.appendChild(script);
 
     return () => {
-      container.current.innerHTML = '';
+      if (container.current) container.current.innerHTML = '';
       const existing = document.getElementById('tradingview-market-overview');
       if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
     };
@@ -478,11 +478,11 @@ function TradingViewNews() {
       locale: 'en'
     });
 
-    container.current.innerHTML = '';
+    if (container.current) container.current.innerHTML = '';
     container.current.appendChild(script);
 
     return () => {
-      container.current.innerHTML = '';
+      if (container.current) container.current.innerHTML = '';
       const existing = document.getElementById('tradingview-news-feed');
       if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
     };
