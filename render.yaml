@@ -1,0 +1,65 @@
+services:
+  - type: web
+    name: Velnix markets
+    env: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: FIREBASE_PROJECT_ID
+        fromSecret: FIREBASE_PROJECT_ID
+      - key: FIREBASE_CLIENT_EMAIL
+        fromSecret: FIREBASE_CLIENT_EMAIL
+      - key: FIREBASE_PRIVATE_KEY
+        fromSecret: FIREBASE_PRIVATE_KEY
+      - key: FIREBASE_DATABASE_ID
+        fromSecret: FIREBASE_DATABASE_ID
+      - key: VITE_FIREBASE_API_KEY
+        fromSecret: VITE_FIREBASE_API_KEY
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        fromSecret: VITE_FIREBASE_AUTH_DOMAIN
+      - key: VITE_FIREBASE_PROJECT_ID
+        fromSecret: VITE_FIREBASE_PROJECT_ID
+      - key: VITE_FIREBASE_APP_ID
+        fromSecret: VITE_FIREBASE_APP_ID
+      - key: VITE_FIREBASE_DATABASE_ID
+        fromSecret: VITE_FIREBASE_DATABASE_ID
+      - key: DARAJA_CONSUMER_KEY
+        fromSecret: DARAJA_CONSUMER_KEY
+      - key: DARAJA_CONSUMER_SECRET
+        fromSecret: DARAJA_CONSUMER_SECRET
+      - key: DARAJA_PASSKEY
+        fromSecret: DARAJA_PASSKEY
+      - key: DARAJA_SHORTCODE
+        fromSecret: DARAJA_SHORTCODE
+      - key: DARAJA_CALLBACK_URL
+        fromSecret: DARAJA_CALLBACK_URL
+      - key: DARAJA_B2C_SHORTCODE
+        fromSecret: DARAJA_B2C_SHORTCODE
+      - key: DARAJA_B2C_INITIATOR_NAME
+        fromSecret: DARAJA_B2C_INITIATOR_NAME
+      - key: DARAJA_B2C_SECURITY_CREDENTIAL
+        fromSecret: DARAJA_B2C_SECURITY_CREDENTIAL
+      - key: DARAJA_B2C_RESULT_URL
+        fromSecret: DARAJA_B2C_RESULT_URL
+      - key: DARAJA_CALLBACK_ALLOWED_IPS
+        fromSecret: DARAJA_CALLBACK_ALLOWED_IPS
+      - key: ADMIN_REFERRAL_CODE
+        fromSecret: ADMIN_REFERRAL_CODE
+      - key: SMTP_HOST
+        fromSecret: SMTP_HOST
+      - key: SMTP_PORT
+        fromSecret: SMTP_PORT
+      - key: SMTP_USER
+        fromSecret: SMTP_USER
+      - key: SMTP_PASS
+        fromSecret: SMTP_PASS
+      - key: SMTP_FROM
+        fromSecret: SMTP_FROM
+      - key: DARAJA_ENV
+        value: production
