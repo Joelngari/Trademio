@@ -194,9 +194,9 @@ export default function TraderHome() {
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Trading Dashboard</h1>
-          <p className="text-gray-400">Trade live instruments with real funding and production-ready analytics.</p>
+          <p className="text-gray-400">Trade live instruments with real funding  analytics.</p>
         </div>
-        <div className="rounded-full bg-[#87ceeb]/10 border border-[#87ceeb]/20 px-4 py-2 text-sm text-[#87ceeb]">Production trading dashboard</div>
+        
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

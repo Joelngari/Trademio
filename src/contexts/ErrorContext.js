@@ -25,7 +25,11 @@ export function ErrorProvider({ children }) {
     };
 
     const onError = (ev) => {
-      showError(ev?.message || 'An unexpected error occurred');
+      const msg = ev?.message || 'An unexpected error occurred';
+      // Silently ignore CORS-masked external script errors so they never show to the user
+      if (typeof msg === 'string' && msg.toLowerCase().includes('script error')) return;
+      
+      showError(msg);
     };
 
     window.addEventListener('unhandledrejection', onUnhandledRejection);
