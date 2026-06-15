@@ -371,9 +371,14 @@ export default function TraderHome() {
 
       {/* Main Chart */}
       <div className="bg-[#121212] rounded-2xl border border-white/5 overflow-hidden">
-        <div className="p-4 border-b border-white/5 flex items-center justify-between">
+        <div className="p-4 border-b border-white/5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="font-bold text-white">Live Market Analysis</h3>
           <div className="flex flex-wrap items-center gap-2">
+            <InstrumentSelectorButton
+              marketData={marketData}
+              tradeForm={tradeForm}
+              setTradeForm={setTradeForm}
+            />
             <label className="text-xs uppercase tracking-widest text-gray-500">Chart</label>
             <select
               value={chartStyle}
@@ -456,6 +461,63 @@ function TradingViewMarketOverview() {
   }, []);
 
   return <div ref={container} className="tradingview-widget-container w-full overflow-hidden" style={{ minHeight: '320px' }} />;
+}
+
+function InstrumentSelectorButton({ marketData = [], tradeForm, setTradeForm }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef();
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const handleSelect = (symbol) => {
+    setTradeForm((prev) => ({ ...prev, symbol }));
+    setOpen(false);
+  };
+
+  // Chosen label - concise and descriptive per request
+  const label = 'Select instrument to view live chart';
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((s) => !s)}
+        className="px-3 py-2 rounded-xl bg-white/5 text-white text-sm hover:bg-white/10 transition"
+        aria-haspopup="true"
+        aria-expanded={open}
+      >
+        {label}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-2 w-72 max-h-80 overflow-auto bg-[#0b0b0b] border border-white/10 rounded-2xl shadow-lg z-50">
+          {marketData.length === 0 ? (
+            <div className="p-4 text-gray-400">No instruments available</div>
+          ) : (
+            marketData.map((item) => (
+              <button
+                key={item.symbol}
+                onClick={() => handleSelect(item.symbol)}
+                className="w-full text-left px-4 py-3 hover:bg-white/5 transition text-white flex items-center justify-between"
+              >
+                <div>
+                  <div className="text-sm text-gray-400">{item.displayName || item.symbol}</div>
+                  <div className="text-xs text-white font-semibold">{item.symbol}</div>
+                </div>
+                <div className="text-sm text-gray-400">{item.price ?? '---'}</div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function TradingViewNews() {
