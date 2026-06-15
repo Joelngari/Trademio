@@ -398,7 +398,14 @@ export default function TraderHome() {
       {/* Bottom Widgets */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-[#121212] rounded-2xl border border-white/5 p-4 min-h-[360px] sm:min-h-[400px]">
-           <h3 className="font-bold text-white mb-4">Market Overview</h3>
+           <div className="flex items-center justify-between mb-4 gap-3">
+             <h3 className="font-bold text-white">Market Overview</h3>
+             <InstrumentSelectorButton
+               marketData={marketData}
+               tradeForm={tradeForm}
+               setTradeForm={setTradeForm}
+             />
+           </div>
            <TradingViewMarketOverview />
         </div>
         <div className="bg-[#121212] rounded-2xl border border-white/5 p-4 min-h-[360px] sm:min-h-[400px]">
@@ -481,14 +488,14 @@ function InstrumentSelectorButton({ marketData = [], tradeForm, setTradeForm }) 
     setOpen(false);
   };
 
-  // Chosen label - concise and descriptive per request
-  const label = 'Select instrument to view live chart';
+  const label = 'Select your instrument to view the live market graph';
 
   return (
     <div className="relative" ref={ref}>
       <button
+        type="button"
         onClick={() => setOpen((s) => !s)}
-        className="px-3 py-2 rounded-xl bg-white/5 text-white text-sm hover:bg-white/10 transition"
+        className="px-4 py-2 rounded-2xl bg-[#111827] border border-white/10 text-white text-sm font-semibold hover:bg-white/10 transition"
         aria-haspopup="true"
         aria-expanded={open}
       >

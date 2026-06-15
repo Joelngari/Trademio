@@ -14,6 +14,24 @@ export default function TopBar({ setIsOpen }) {
         >
           <Menu size={20} />
         </button>
+        
+        {/* Logo */}
+        <div className="hidden md:flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-[#1a1a2e] to-[#0f3460] border border-[#ffd700] rounded-full flex items-center justify-center">
+            <span className="text-xs font-bold text-[#ffd700]">VM</span>
+          </div>
+          <div className="flex flex-col">
+            <h1 className="text-sm font-bold text-white">Velnix Markets</h1>
+            <p className="text-[10px] text-gray-400">Trading Platform</p>
+          </div>
+        </div>
+
+        <div className="md:hidden">
+          <div className="w-8 h-8 bg-gradient-to-br from-[#1a1a2e] to-[#0f3460] border border-[#ffd700] rounded-full flex items-center justify-center">
+            <span className="text-[10px] font-bold text-[#ffd700]">VM</span>
+          </div>
+        </div>
+
         <div className="hidden md:block">
           <h2 className="text-sm font-medium text-gray-400">Welcome back,</h2>
           <p className="text-sm font-bold text-white">{profile?.name || user?.email}</p>

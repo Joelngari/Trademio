@@ -73,8 +73,14 @@ export default function Sidebar({ isOpen, setIsOpen }) {
       {/* Sidebar */}
       <aside className={`fixed top-0 left-0 bottom-0 w-64 bg-[#121212] border-r border-white/5 z-50 transform transition-transform duration-300 md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex flex-col h-full">
-          <div className="p-6">
-            <h1 className="text-2xl font-bold text-[#87ceeb] tracking-tight">Velnix Markets</h1>
+          <div className="p-6 flex items-center gap-3 border-b border-white/5">
+            <div className="w-12 h-12 bg-gradient-to-br from-[#1a1a2e] to-[#0f3460] border-2 border-[#ffd700] rounded-full flex items-center justify-center flex-shrink-0">
+              <span className="text-sm font-bold text-[#ffd700]">VM</span>
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-white">Velnix</h1>
+              <p className="text-[10px] text-[#ffd700] font-semibold">Markets</p>
+            </div>
           </div>
 
           <nav className="flex-1 px-4 space-y-1 overflow-y-auto custom-scrollbar">

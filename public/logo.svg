@@ -1,0 +1,23 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle with gradient -->
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f3460;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffd700;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ffed4e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main circle background -->
+  <circle cx="100" cy="100" r="95" fill="url(#logoGradient)" stroke="#ffd700" stroke-width="2"/>
+  
+  <!-- VM Text -->
+  <text x="100" y="125" font-family="Arial, sans-serif" font-size="80" font-weight="bold" text-anchor="middle" fill="url(#textGradient)" letter-spacing="5">VM</text>
+  
+  <!-- Accent lines for premium feel -->
+  <line x1="55" y1="40" x2="75" y2="40" stroke="#ffd700" stroke-width="2" stroke-linecap="round"/>
+  <line x1="125" y1="160" x2="145" y2="160" stroke="#ffd700" stroke-width="2" stroke-linecap="round"/>
+</svg>

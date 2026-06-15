@@ -42,7 +42,12 @@ export default function Login() {
         <div className="absolute top-0 left-0 w-full h-1 bg-[#87ceeb]/20" />
         
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-[#87ceeb] mb-2">Velnix Markets</h1>
+          <div className="flex justify-center mb-4">
+            <div className="w-16 h-16 bg-gradient-to-br from-[#1a1a2e] to-[#0f3460] border-2 border-[#ffd700] rounded-full flex items-center justify-center">
+              <span className="text-2xl font-bold text-[#ffd700]">VM</span>
+            </div>
+          </div>
+          <h1 className="text-3xl font-bold text-white mb-1">Velnix Markets</h1>
           <p className="text-gray-400 text-sm">Secure Login</p>
         </div>
 
