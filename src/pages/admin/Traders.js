@@ -108,15 +108,15 @@ export default function AdminTraders() {
     }
   };
 
-  const handlePromoteToMarketer = async () => {
-    if (!traderDetails) return;
+  const handlePromoteToMarketer = async (trader) => {
+    if (!trader) return;
     
-    const confirm = window.confirm(`Promote ${traderDetails.name} to marketer?\n\nReferral Code: ${traderDetails.username.toUpperCase()}`);
-    if (!confirm) return;
+    const confirmPromotion = window.confirm(`Promote ${trader.name} to marketer?\n\nReferral Code: ${trader.username.toUpperCase()}`);
+    if (!confirmPromotion) return;
 
     try {
       const token = await auth.currentUser.getIdToken();
-      const res = await fetch(`/api/admin/promote-to-marketer/${traderDetails.id}`, {
+      const res = await fetch(`/api/admin/promote-to-marketer/${trader.id}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -130,7 +130,7 @@ export default function AdminTraders() {
       }
 
       const data = await res.json();
-      alert(`${traderDetails.name} promoted to marketer!\nReferral Code: ${data.referralCode}`);
+      alert(`${trader.name} promoted to marketer!\nReferral Code: ${data.referralCode}`);
       setSelectedTrader(null);
       setTraderDetails(null);
     } catch (err) {
@@ -203,7 +203,7 @@ export default function AdminTraders() {
                     {t.createdAt?.toDate().toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                        <button 
                         onClick={() => handleViewTraderDetails(t)}
                         className="p-2 bg-white/5 text-gray-400 hover:text-[#87ceeb] hover:bg-white/10 rounded-lg transition-colors"
@@ -218,6 +218,15 @@ export default function AdminTraders() {
                        >
                          {t.status === 'active' ? <ShieldOff size={16} /> : <Shield size={16} />}
                        </button>
+                       {t.role === 'trader' && (
+                         <button
+                           onClick={() => handlePromoteToMarketer(t)}
+                           className="p-2 bg-purple-600 text-white hover:bg-purple-700 rounded-lg transition-colors"
+                           title="Promote to marketer"
+                         >
+                           M
+                         </button>
+                       )}
                     </div>
                   </td>
                 </tr>
