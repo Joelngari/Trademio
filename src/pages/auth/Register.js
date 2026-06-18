@@ -40,7 +40,59 @@ export default function Register() {
       await signInWithEmailAndPassword(auth, formData.email, formData.password);
       navigate('/trader/home');
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Registration failed');
+      // Prefer normalized user-facing message set by `api` interceptor
+      const serverMessage = err.userMessage || err.response?.data?.message || err.response?.data?.error || err.response?.data?.errors || err.message;
+
+      // Helper: try to extract JSON blob embedded in a string
+      const extractJson = (text) => {
+        if (!text || typeof text !== 'string') return null;
+        // attempt to find a {...} block
+        const match = text.match(/(\{[\s\S]*\})/);
+        if (!match) return null;
+        try {
+          // replace single-quoted keys/values and escaped quotes if needed
+          const candidate = match[1].replace(/\"/g, '"');
+          return JSON.parse(candidate);
+        } catch (_) {
+          return null;
+        }
+      };
+
+      const sanitize = (raw) => {
+        if (!raw) return '';
+        if (Array.isArray(raw)) return raw.map((r) => (typeof r === 'string' ? r : r.message || JSON.stringify(r))).join('; ');
+        if (typeof raw === 'object') {
+          if (raw.message) return raw.message;
+          if (raw.errors) {
+            const errs = Array.isArray(raw.errors) ? raw.errors : Object.values(raw.errors || {});
+            return errs.map((e) => (e.message ? e.message : e)).join('; ');
+          }
+          return JSON.stringify(raw);
+        }
+
+        // It's a string. Remove any trailing raw JSON the backend may have appended.
+        let text = String(raw);
+        // If backend includes a 'Raw server response' marker, take the part before it
+        const marker = 'Raw server response';
+        const idx = text.indexOf(marker);
+        if (idx !== -1) text = text.slice(0, idx).trim();
+
+        // If there's embedded JSON, try to parse and extract message/errors
+        const parsed = extractJson(String(raw));
+        if (parsed) {
+          if (parsed.message) return parsed.message;
+          if (parsed.errors) {
+            const errs = Array.isArray(parsed.errors) ? parsed.errors : Object.values(parsed.errors || {});
+            return errs.map((e) => (e.message ? e.message : e)).join('; ');
+          }
+        }
+
+        // fallback to trimmed text
+        return text;
+      };
+
+      const friendly = sanitize(serverMessage) || 'Registration failed';
+      setError(friendly);
     } finally {
       setLoading(false);
     }
