@@ -31,12 +31,6 @@ api.interceptors.response.use(
 
     error.userMessage = message;
 
-    try {
-      if (typeof window !== 'undefined' && window.showAppError) window.showAppError(message);
-    } catch (e) {
-      // ignore
-    }
-
     return Promise.reject(error);
   }
 );

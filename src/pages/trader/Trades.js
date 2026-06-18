@@ -66,7 +66,7 @@ export default function Trades() {
       setLoading(false);
     } catch (err) {
         console.error(err);
-        if (typeof window !== 'undefined' && window.showAppError) window.showAppError(err.message || err);
+        // Silently log fetch errors instead of surfacing a disruptive global red banner
         setLoading(false);
     }
   }, []);

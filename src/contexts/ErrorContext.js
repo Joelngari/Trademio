@@ -20,24 +20,14 @@ export function ErrorProvider({ children }) {
     window.showAppError = (msg) => showError(msg);
 
     const onUnhandledRejection = (ev) => {
-      const msg = ev?.reason?.message || ev?.reason || 'An unexpected error occurred';
-      showError(msg);
+      // Silenced to prevent non-critical background promise rejections from showing red banners
     };
 
     const onError = (ev) => {
-      const msg = ev?.message || 'An unexpected error occurred';
-      // Silently ignore CORS-masked external script errors so they never show to the user
-      if (typeof msg === 'string' && msg.toLowerCase().includes('script error')) return;
-      
-      showError(msg);
+      // Silenced to prevent silent browser rendering/extension errors from showing red banners
     };
 
-    window.addEventListener('unhandledrejection', onUnhandledRejection);
-    window.addEventListener('error', onError);
-
     return () => {
-      window.removeEventListener('unhandledrejection', onUnhandledRejection);
-      window.removeEventListener('error', onError);
       window.showAppError = undefined;
     };
   }, [showError]);

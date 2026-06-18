@@ -34,7 +34,7 @@ export default function TraderHome() {
       }
     } catch (err) {
         console.error(err);
-        if (typeof window !== 'undefined' && window.showAppError) window.showAppError(err.message || err);
+        // Silently log fetch errors instead of surfacing a disruptive global red banner
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -101,7 +101,6 @@ export default function TraderHome() {
       await fetchData();
     } catch (err) {
       console.error(err);
-      if (typeof window !== 'undefined' && window.showAppError) window.showAppError(err.response?.data?.message || err.message || 'Order failed');
       setOrderMessage({ type: 'error', text: err.response?.data?.message || err.message || 'Order failed' });
     } finally {
       setOrderLoading(false);

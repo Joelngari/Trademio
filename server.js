@@ -908,7 +908,7 @@ app.post('/api/trader/order', authMiddleware, async (req, res) => {
     const accountFields = getAccountFields(accountType);
     const depositAmount = mergedTrader[accountFields.deposit] || 0;
     const tradingAmount = mergedTrader[accountFields.trading] || 0;
-    const currentPrice = getInstrumentPrice(symbol);
+    const currentPrice = await getInstrumentPrice(symbol);
     const fillPrice = side === 'buy'
       ? Number((currentPrice + instrument.spread / 2).toFixed(instrument.decimals))
       : Number((currentPrice - instrument.spread / 2).toFixed(instrument.decimals));
