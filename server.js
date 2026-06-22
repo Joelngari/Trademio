@@ -337,9 +337,10 @@ app.get('/api/payments/status/:checkoutRequestId', authMiddleware, async (req, r
 });
 
 app.post('/api/payments/callback', async (req, res) => {
-  console.log('STK callback endpoint hit', {
+  console.log('✅ STK callback endpoint hit', {
     method: req.method,
     path: req.path,
+    ip: req.ip || req.headers['x-forwarded-for'],
     signature: Boolean(req.headers['x-daraja-signature']),
     bodyKeys: Object.keys(req.body || {})
   });
@@ -349,10 +350,10 @@ app.post('/api/payments/callback', async (req, res) => {
     .split(',')
     .map(ip => ip.trim())
     .filter(Boolean);
-  const clientIp = req.ip || req.headers['x-forwarded-for'];
+  const clientIp = req.ip || req.headers['x-forwarded-for'] || 'unknown';
   
   if (allowedIps.length > 0 && !allowedIps.includes(clientIp)) {
-    console.warn(`Callback rejected: unauthorized IP ${clientIp}`, { allowedIps });
+    console.warn(`❌ Callback rejected: unauthorized IP ${clientIp}`, { allowedIps });
     return res.status(403).json({ message: 'Forbidden' });
   }
 
@@ -363,43 +364,60 @@ app.post('/api/payments/callback', async (req, res) => {
   if (callbackSecret) {
     const rawBody = JSON.stringify(req.body);
     if (!verifyCallbackSignature(rawBody, signature, callbackSecret)) {
-      console.warn('Callback rejected: invalid signature');
+      console.warn('❌ Callback rejected: invalid signature', { hasSignature: !!signature, hasSecret: !!callbackSecret });
       return res.status(401).json({ message: 'Invalid signature' });
     }
   } else if (signature) {
-    console.warn('Callback signature header present but DARAJA_CALLBACK_SECRET is not configured; skipping signature validation.');
+    console.warn('⚠️  Callback signature header present but DARAJA_CALLBACK_SECRET is not configured; skipping signature validation.');
   }
 
-  if (!req.body || !req.body.Body || !req.body.Body.stkCallback) {
-    console.warn('Invalid STK callback payload received', JSON.stringify(req.body).slice(0, 2000));
+  if (!req.body) {
+    console.warn('❌ Invalid STK callback: empty body');
     return res.status(400).json({ message: 'Invalid callback payload' });
   }
 
-  const { Body } = req.body;
+  const Body = req.body.Body;
+  if (!Body) {
+    console.warn('❌ Invalid STK callback: missing Body wrapper', { bodyKeys: Object.keys(req.body) });
+    return res.status(400).json({ message: 'Invalid callback payload - missing Body' });
+  }
+
   const stkCallback = Body.stkCallback;
+  if (!stkCallback) {
+    console.warn('❌ Invalid STK callback: missing stkCallback', { bodyKeys: Object.keys(Body) });
+    return res.status(400).json({ message: 'Invalid callback payload - missing stkCallback' });
+  }
+
   const checkoutRequestId = stkCallback.CheckoutRequestID;
+  if (!checkoutRequestId) {
+    console.warn('❌ Invalid STK callback: missing CheckoutRequestID');
+    return res.status(400).json({ message: 'Invalid callback payload - missing CheckoutRequestID' });
+  }
+
   const callbackTimestamp = stkCallback.Timestamp || Date.now();
   
   // Validate timestamp (reject if older than 5 minutes)
   if (!validateTimestamp(callbackTimestamp, 300)) {
-    console.warn('Callback rejected: stale timestamp', checkoutRequestId);
+    console.warn('❌ Callback rejected: stale timestamp', checkoutRequestId);
     return res.status(400).json({ message: 'Stale request' });
   }
+  
+  console.log('📝 Processing STK callback', { checkoutRequestId, timestamp: callbackTimestamp });
 
   // Idempotency check: prevent duplicate processing
   try {
     const processed = await isCallbackProcessed(adminDb, checkoutRequestId);
     if (processed) {
-      console.log('Callback already processed:', checkoutRequestId, { resultCode: stkCallback.ResultCode });
-      return res.status(409).json({ message: 'Already processed' });
+      console.log('⚠️  Callback already processed:', checkoutRequestId, { resultCode: stkCallback.ResultCode });
+      return res.status(200).send('OK');
     }
   } catch (err) {
-    console.error('Idempotency check error:', err);
-    return res.status(500).json({ message: 'Internal error' });
+    console.error('❌ Idempotency check error:', err.message);
+    // Don't fail - continue processing
   }
 
   const resultCode = stkCallback.ResultCode;
-  console.log('Processing STK callback', { checkoutRequestId, resultCode });
+  console.log('🔄 Processing STK callback', { checkoutRequestId, resultCode });
 
   try {
     const transactions = await adminDb.collection('transactions')
@@ -417,8 +435,9 @@ app.post('/api/payments/callback', async (req, res) => {
     const transData = transactionDoc.data();
 
     if (resultCode === 0) {
-      const mpesaReceiptNumber = stkCallback.CallbackMetadata.Item.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
-      console.log('STK callback success, updating transaction', { checkoutRequestId, mpesaReceiptNumber });
+      const items = stkCallback.CallbackMetadata?.Item || [];
+      const mpesaReceiptNumber = items.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
+      console.log('✅ STK callback success, updating transaction', { checkoutRequestId, mpesaReceiptNumber });
 
       const splitResult = await handleSuccessfulPayment(transactionDoc.ref, transData, mpesaReceiptNumber);
       await markCallbackProcessed(adminDb, checkoutRequestId);
@@ -437,13 +456,13 @@ app.post('/api/payments/callback', async (req, res) => {
 
       res.status(200).json(splitResult);
     } else {
-      console.warn('STK callback failure result code, marking transaction failed', { checkoutRequestId, resultCode });
-      await transactionDoc.ref.update({ status: 'failed' });
+      console.warn('⚠️  STK callback failure result code', { checkoutRequestId, resultCode, resultDesc: stkCallback.ResultDesc });
+      await transactionDoc.ref.update({ status: 'failed', failureReason: stkCallback.ResultDesc });
       await markCallbackProcessed(adminDb, checkoutRequestId);
       res.status(200).json({ message: 'Transaction failed' });
     }
   } catch (error) {
-    console.error('Callback processing error:', error);
+    console.error('❌ Callback processing error:', error.message, { checkoutRequestId });
     res.status(500).send('Error');
   }
 });
@@ -1481,8 +1500,11 @@ cron.schedule('*/10 * * * * *', async () => {
 // --- SEEDING ---
 
 async function seedDatabase() {
+  console.log('🌱 seedDatabase: Starting seed operations...');
   const settingsRef = adminDb.collection('settings').doc('platform');
+  console.log('🌱 seedDatabase: Fetching settings doc...');
   const settingsDoc = await settingsRef.get();
+  console.log('🌱 seedDatabase: Settings doc fetched, exists:', settingsDoc.exists);
   if (!settingsDoc.exists) {
     await settingsRef.set({
       platformName: 'Velnix Markets',
@@ -1501,7 +1523,9 @@ async function seedDatabase() {
     }, { merge: true });
   }
 
+  console.log('🌱 seedDatabase: Checking packages collection...');
   const packagesCheck = await adminDb.collection('packages').limit(1).get();
+  console.log('🌱 seedDatabase: Packages check done, empty:', packagesCheck.empty);
   if (packagesCheck.empty) {
     const pkgs = [
       // Forex
@@ -1530,18 +1554,24 @@ async function seedDatabase() {
       const ref = adminDb.collection('packages').doc();
       batch.set(ref, { ...p, id: ref.id });
     });
+    console.log('🌱 seedDatabase: Batch commit for packages...');
     await batch.commit();
+    console.log('🌱 seedDatabase: Packages seeded successfully');
   }
 
+  console.log('🌱 seedDatabase: Starting admin user seed...');
   await seedAdminUser();
+  console.log('🌱 seedDatabase: Admin user seed complete');
 }
 
 async function seedAdminUser() {
+  console.log('👤 seedAdminUser: Starting admin user seed...');
   // Only create admin if explicit env vars are set. Prevents accidental admin creation.
   // To create initial admin: set INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD in .env
   // then restart server once. Remove env vars afterward for security.
   const adminEmail = process.env.INITIAL_ADMIN_EMAIL;
   const adminPassword = process.env.INITIAL_ADMIN_PASSWORD;
+  console.log('👤 seedAdminUser: Admin email configured:', !!adminEmail);
   
   if (!adminEmail || !adminPassword) {
     console.log('ℹ  Admin seeding skipped (INITIAL_ADMIN_EMAIL and/or INITIAL_ADMIN_PASSWORD not set).');
@@ -1722,9 +1752,28 @@ app.post('/api/admin/payouts/approve/:requestId', authMiddleware, roleMiddleware
 
 app.post('/api/payouts/callback', async (req, res) => {
    // Shared callback for both trader and marketer payouts
-   const { Result } = req.body;
+   console.log('✅ B2C callback endpoint hit', {
+     method: req.method,
+     path: req.path,
+     ip: req.ip || req.headers['x-forwarded-for'],
+     bodyKeys: Object.keys(req.body || {})
+   });
+
+   if (!req.body || !req.body.Result) {
+     console.warn('❌ Invalid B2C callback: missing Result', { bodyKeys: Object.keys(req.body || {}) });
+     return res.status(400).send('Invalid callback payload');
+   }
+
+   const Result = req.body.Result;
    const conversationId = Result.ConversationID;
    const resultCode = Result.ResultCode;
+
+   if (!conversationId) {
+     console.warn('❌ Invalid B2C callback: missing ConversationID');
+     return res.status(400).send('Invalid callback payload - missing ConversationID');
+   }
+
+   console.log('🔄 Processing B2C callback', { conversationId, resultCode });
 
    try {
       // Find the payout in either collection
@@ -1735,10 +1784,13 @@ app.post('/api/payouts/callback', async (req, res) => {
          const doc = mPayouts.docs[0];
          const data = doc.data();
          if (resultCode === 0) {
-            const receipt = Result.ResultParameters.ResultParameter.find(p => p.Key === 'TransactionID')?.Value;
+            const params = Result.ResultParameters?.ResultParameter || [];
+            const receipt = params.find(p => p.Key === 'TransactionID')?.Value;
+            console.log('✅ B2C callback success for marketer payout', { conversationId, receipt });
             await doc.ref.update({ status: 'paid', paidAt: admin.firestore.FieldValue.serverTimestamp(), mpesaReceiptNumber: receipt });
          } else {
             // Restore balance
+            console.log('⚠️  B2C callback failure for marketer payout', { conversationId, resultCode, desc: Result.ResultDesc });
             await adminDb.collection('marketers').doc(data.marketerId).update({
                commissionBalance: admin.firestore.FieldValue.increment(data.amount)
             });
@@ -1748,32 +1800,31 @@ app.post('/api/payouts/callback', async (req, res) => {
          const doc = tWithdrawals.docs[0];
          const data = doc.data();
          if (resultCode === 0) {
-            const receipt = Result.ResultParameters.ResultParameter.find(p => p.Key === 'TransactionID')?.Value;
+            const params = Result.ResultParameters?.ResultParameter || [];
+            const receipt = params.find(p => p.Key === 'TransactionID')?.Value;
+            console.log('✅ B2C callback success for trader withdrawal', { conversationId, receipt });
             await doc.ref.update({ status: 'approved', resolvedAt: admin.firestore.FieldValue.serverTimestamp(), mpesaReceiptNumber: receipt });
             // Deduct from trading balance
             await adminDb.collection('traders').doc(data.traderId).update({
                tradingBalance: admin.firestore.FieldValue.increment(-data.amount)
             });
          } else {
+            console.log('⚠️  B2C callback failure for trader withdrawal', { conversationId, resultCode, desc: Result.ResultDesc });
             await doc.ref.update({ status: 'review', adminNote: 'Payout failed: ' + Result.ResultDesc });
          }
+      } else {
+         console.warn('⚠️  B2C callback: no matching payout or withdrawal found', { conversationId });
       }
       invalidateCache('marketers', 'traders', 'marketerPayouts', 'withdrawals');
       res.status(200).send('OK');
    } catch (error) {
-      console.error('B2C Callback Error:', error);
+      console.error('❌ B2C Callback Error:', error.message, { conversationId });
       res.status(500).send('Error');
    }
 });
 
 // Vite middleware for development
 async function startServer() {
-  try {
-    await seedDatabase();
-  } catch (error) {
-    console.error('Failed to seed database on startup:', error.message);
-  }
-
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -1788,9 +1839,26 @@ async function startServer() {
     });
   }
 
+  // Start server immediately so callback routes are available
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`✅ Server running on http://localhost:${PORT}`);
   });
+
+  // Run database seeding in background (non-blocking)
+  // Add timeout to prevent infinite hangs
+  const seedTimeout = setTimeout(() => {
+    console.error('❌ seedDatabase timeout after 30 seconds - aborting seed');
+  }, 30000);
+
+  try {
+    console.log('🚀 Starting background database seed operations...');
+    await seedDatabase();
+    clearTimeout(seedTimeout);
+    console.log('✅ Database seed operations completed successfully');
+  } catch (error) {
+    clearTimeout(seedTimeout);
+    console.error('❌ Failed to seed database:', error.message);
+  }
 }
 
 startServer();
