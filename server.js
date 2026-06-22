@@ -352,25 +352,25 @@ app.get('/api/payments/status/:checkoutRequestId', authMiddleware, async (req, r
   }
 });
 
-app.post('/api/payments/callback', async (req, res) => {
+// --- TEMPORARY DARAJA PING ENDPOINT ---
+app.all('/api/payments/ping', (req, res) => {
   const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',').map(ip => ip.trim()).filter(Boolean);
   const clientIp = forwardedFor[0] || req.socket.remoteAddress || req.ip || 'unknown';
 
-  console.log('✅ STK callback endpoint hit', {
+  console.log('✅✅✅ DARAJA PING ENDPOINT HIT! ✅✅✅', {
     method: req.method,
     path: req.path,
     clientIp,
     xForwardedFor: forwardedFor,
     socketRemoteAddress: req.socket.remoteAddress,
-    signature: Boolean(req.headers['x-daraja-signature']),
-    bodyKeys: Object.keys(req.body || {})
+    headers: req.headers,
+    bodyKeys: Object.keys(req.body || {}),
+    rawBody: req.rawBody || null
   });
 
-  // IP whitelist check (if configured)
-  const allowedIps = (process.env.DARAJA_CALLBACK_ALLOWED_IPS || '')
-    .split(',')
-    .map(ip => ip.trim())
-    .filter(Boolean);
+  res.status(200).json({ status: 'ok', message: 'Ping received' });
+});
+
   
   if (allowedIps.length > 0 && !allowedIps.includes(clientIp)) {
     console.warn(`❌ Callback rejected: unauthorized IP ${clientIp}`, { allowedIps });
