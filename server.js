@@ -303,7 +303,9 @@ app.post('/api/payments/stk-push', authMiddleware, paymentLimiter, async (req, r
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
+    console.log('📤 STK push request starting', { phoneNumber, amount, transactionRefId: transactionRef.id, description });
     const result = await initiateStkPush(phoneNumber, amount, transactionRef.id, description);
+    console.log('📤 STK push initiation completed', { checkoutRequestId: result.CheckoutRequestID, response: result });
     
     // Update transaction with CheckoutRequestID
     await transactionRef.update({ checkoutRequestId: result.CheckoutRequestID });

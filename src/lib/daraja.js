@@ -65,10 +65,20 @@ export async function initiateStkPush(phoneNumber, amount, accountReference, tra
     TransactionDesc: transactionDesc
   };
 
+  console.log('📤 Initiating STK push', {
+    baseUrl: BASE_URL,
+    callbackUrl: DARAJA_CALLBACK_URL,
+    amount: payload.Amount,
+    PhoneNumber: payload.PhoneNumber,
+    accountReference,
+    transactionDesc
+  });
+
   try {
     const response = await axios.post(`${BASE_URL}/mpesa/stkpush/v1/processrequest`, payload, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
+    console.log('📥 Daraja STK push response', { data: response.data });
     return response.data;
   } catch (error) {
     console.error('STK Push Error:', error.response?.data || error.message);
