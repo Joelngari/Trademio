@@ -14,11 +14,14 @@ export function verifyCallbackSignature(payload, signature, secret) {
     .createHmac('sha256', secret)
     .update(payload)
     .digest('hex');
-  
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  );
+
+  const signatureBuffer = Buffer.from(signature || '', 'utf8');
+  const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
+  if (signatureBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(signatureBuffer, expectedBuffer);
 }
 
 /**

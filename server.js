@@ -37,8 +37,18 @@ import nodemailer from 'nodemailer';
 dotenv.config();
 
 const app = express();
-app.set('trust proxy', true);
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
+
+console.log('Server config:', {
+  NODE_ENV: process.env.NODE_ENV,
+  PORT,
+  DARAJA_ENV: process.env.DARAJA_ENV,
+  DARAJA_CALLBACK_URL: process.env.DARAJA_CALLBACK_URL,
+  DARAJA_B2C_RESULT_URL: process.env.DARAJA_B2C_RESULT_URL,
+  DARAJA_CALLBACK_ALLOWED_IPS: process.env.DARAJA_CALLBACK_ALLOWED_IPS || '(none)',
+  hasCallbackSecret: Boolean(process.env.DARAJA_CALLBACK_SECRET)
+});
 
 // Rate limiters
 const authLimiter = rateLimit({
@@ -65,7 +75,11 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString('utf8');
+  }
+}));
 
 const notificationEmailTo = process.env.NOTIFICATION_TO_EMAIL || 'joelgitonga79@gmail.com';
 
@@ -339,10 +353,15 @@ app.get('/api/payments/status/:checkoutRequestId', authMiddleware, async (req, r
 });
 
 app.post('/api/payments/callback', async (req, res) => {
+  const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',').map(ip => ip.trim()).filter(Boolean);
+  const clientIp = forwardedFor[0] || req.socket.remoteAddress || req.ip || 'unknown';
+
   console.log('✅ STK callback endpoint hit', {
     method: req.method,
     path: req.path,
-    ip: req.ip || req.headers['x-forwarded-for'],
+    clientIp,
+    xForwardedFor: forwardedFor,
+    socketRemoteAddress: req.socket.remoteAddress,
     signature: Boolean(req.headers['x-daraja-signature']),
     bodyKeys: Object.keys(req.body || {})
   });
@@ -352,7 +371,6 @@ app.post('/api/payments/callback', async (req, res) => {
     .split(',')
     .map(ip => ip.trim())
     .filter(Boolean);
-  const clientIp = req.ip || req.headers['x-forwarded-for'] || 'unknown';
   
   if (allowedIps.length > 0 && !allowedIps.includes(clientIp)) {
     console.warn(`❌ Callback rejected: unauthorized IP ${clientIp}`, { allowedIps });
@@ -364,7 +382,7 @@ app.post('/api/payments/callback', async (req, res) => {
   const callbackSecret = process.env.DARAJA_CALLBACK_SECRET;
 
   if (callbackSecret) {
-    const rawBody = JSON.stringify(req.body);
+    const rawBody = req.rawBody || JSON.stringify(req.body);
     if (!verifyCallbackSignature(rawBody, signature, callbackSecret)) {
       console.warn('❌ Callback rejected: invalid signature', { hasSignature: !!signature, hasSecret: !!callbackSecret });
       return res.status(401).json({ message: 'Invalid signature' });
