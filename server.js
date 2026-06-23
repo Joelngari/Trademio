@@ -352,25 +352,6 @@ app.get('/api/payments/status/:checkoutRequestId', authMiddleware, async (req, r
   }
 });
 
-// --- TEMPORARY DARAJA PING ENDPOINT ---
-app.all('/api/payments/ping', (req, res) => {
-  const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',').map(ip => ip.trim()).filter(Boolean);
-  const clientIp = forwardedFor[0] || req.socket.remoteAddress || req.ip || 'unknown';
-
-  console.log('✅✅✅ DARAJA PING ENDPOINT HIT! ✅✅✅', {
-    method: req.method,
-    path: req.path,
-    clientIp,
-    xForwardedFor: forwardedFor,
-    socketRemoteAddress: req.socket.remoteAddress,
-    headers: req.headers,
-    bodyKeys: Object.keys(req.body || {}),
-    rawBody: req.rawBody || null
-  });
-
-  res.status(200).json({ status: 'ok', message: 'Ping received' });
-});
-
 app.post('/api/payments/callback', async (req, res) => {
   const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',').map(ip => ip.trim()).filter(Boolean);
   const clientIp = forwardedFor[0] || req.socket.remoteAddress || req.ip || 'unknown';
