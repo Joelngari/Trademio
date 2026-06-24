@@ -20,6 +20,15 @@ export default function WithdrawalBot() {
 
   useEffect(() => () => paymentWatchRef.current?.(), []);
 
+  const fetchPendingPurchases = async () => {
+    try {
+      const purchasesRes = await traderApi.getBotPurchases();
+      setBotPurchases(purchasesRes.data.botPurchases || []);
+    } catch (err) {
+      console.warn('Failed to fetch bot purchases:', err);
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -36,13 +45,7 @@ export default function WithdrawalBot() {
           });
         setAmountInputs(initialAmounts);
         
-        // Fetch pending bot purchases
-        try {
-          const purchasesRes = await traderApi.getBotPurchases();
-          setBotPurchases(purchasesRes.data.botPurchases || []);
-        } catch (err) {
-          console.warn('Failed to fetch bot purchases:', err);
-        }
+        await fetchPendingPurchases();
       } catch (err) {
         console.error(err);
       } finally {
@@ -83,15 +86,33 @@ export default function WithdrawalBot() {
         ? `STK push sent for ${formatCurrency(amount, profile?.preferredCurrency)}. Complete payment for ${formatCurrency(pkg.price, profile?.preferredCurrency)} ${pkg.name}.`
         : 'STK push sent! Complete the payment to activate this withdrawal tier.';
       
+      if (isPartial && response.data.botPurchaseId && !isResume) {
+        setBotPurchases((prev) => [
+          {
+            id: response.data.botPurchaseId,
+            packageInfo: { id: pkg.id, name: pkg.name, price: pkg.price, type: pkg.type },
+            requiredAmount: pkg.price,
+            amountPaid: 0,
+            outstandingAmount: pkg.price,
+            status: 'pending'
+          },
+          ...prev.filter((purchase) => purchase.id !== response.data.botPurchaseId)
+        ]);
+      }
+
       setMessage({ type: 'success', text: msgText });
       paymentWatchRef.current?.();
-      paymentWatchRef.current = watchPaymentStatus(response.data.checkoutRequestId, (status) => {
+      paymentWatchRef.current = watchPaymentStatus(response.data.checkoutRequestId, async (status) => {
         if (status === 'success') {
           const successMsg = isPartial 
             ? 'Payment recorded! Your mentor will reconcile the remaining amount.'
             : 'Payment completed successfully. Your withdrawal tier is now active.';
           setMessage({ type: 'success', text: successMsg });
-          setTimeout(() => window.location.reload(), 2000);
+          if (isPartial) {
+            await fetchPendingPurchases();
+          } else {
+            setTimeout(() => window.location.reload(), 2000);
+          }
         }
         if (status === 'failed') {
           setMessage({ type: 'error', text: 'Payment failed or was cancelled. Please try again.' });
@@ -146,7 +167,7 @@ export default function WithdrawalBot() {
             <Clock className="text-yellow-500 mt-1" size={24} />
             <div>
               <h3 className="text-lg font-bold text-white">Pending Purchases</h3>
-              <p className="text-sm text-gray-400">Complete these purchases or wait for admin to reconcile</p>
+              <p className="text-sm text-gray-400">Complete these purchases or wait for your mentor to reconcile the remainder.</p>
             </div>
           </div>
           

@@ -420,7 +420,11 @@ app.post('/api/payments/stk-push', authMiddleware, paymentLimiter, async (req, r
     // Update transaction with CheckoutRequestID
     await transactionRef.update({ checkoutRequestId: result.CheckoutRequestID });
 
-    res.json({ message: 'STK push sent. Check your phone.', checkoutRequestId: result.CheckoutRequestID });
+    res.json({
+      message: 'STK push sent. Check your phone.',
+      checkoutRequestId: result.CheckoutRequestID,
+      botPurchaseId: metadata.botPurchaseId
+    });
   } catch (error) {
     console.error('Payment Error:', error.response?.data || error.message);
     const status = error.response?.status || 500;

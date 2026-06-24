@@ -12,6 +12,7 @@ export default function ForexBot() {
   const { profile } = useAuth();
   const [packages, setPackages] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
+  const [botPurchases, setBotPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(null);
   const [phoneInputs, setPhoneInputs] = useState({});
@@ -22,12 +23,22 @@ export default function ForexBot() {
 
   useEffect(() => () => paymentWatchRef.current?.(), []);
 
+  const fetchPendingPurchases = async () => {
+    try {
+      const purchasesRes = await traderApi.getBotPurchases();
+      setBotPurchases(purchasesRes.data.botPurchases || []);
+    } catch (err) {
+      console.warn('Failed to fetch bot purchases:', err);
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         const response = await traderApi.getDashboard();
         setPackages(response.data.packages.filter(p => p.type === 'forex'));
         setActiveSession(response.data.activeSession);
+        await fetchPendingPurchases();
       } catch (err) {
           console.error(err);
           // Silently log fetch errors
@@ -72,7 +83,7 @@ export default function ForexBot() {
     catch (err) { setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to resume session' }); }
   };
 
-  const handlePurchase = async (pkgId) => {
+  const handlePurchase = async (pkgId, isResume = false, botPurchaseId = null) => {
     if (activeSession && activeSession.status !== 'stopped') return;
     const pkg = packages.find((item) => item.id === pkgId);
     const amount = amountInputs[pkgId] || pkg?.price || 0;
@@ -84,13 +95,44 @@ export default function ForexBot() {
     setPurchasing(pkgId);
     setMessage(null);
     try {
-      const response = await paymentApi.initiateStkPush({ packageId: pkgId, amount, phoneNumber: phoneInputs[pkgId] || profile?.phoneNumber || '' });
-      setMessage({ type: 'success', text: 'STK push sent! Complete the payment to activate this bot.' });
+      const response = await paymentApi.initiateStkPush({ 
+        packageId: pkgId, 
+        amount, 
+        phoneNumber: phoneInputs[pkgId] || profile?.phoneNumber || '',
+        botPurchaseId: isResume ? botPurchaseId : undefined
+      });
+      const isPartial = amount < pkg.price;
+      const msgText = isPartial 
+        ? `STK push sent for ${formatCurrency(amount, profile?.preferredCurrency)}. Complete payment for ${formatCurrency(pkg.price, profile?.preferredCurrency)} ${pkg.name}.`
+        : 'STK push sent! Complete the payment to activate this bot.';
+      
+      if (isPartial && response.data.botPurchaseId && !isResume) {
+        setBotPurchases((prev) => [
+          {
+            id: response.data.botPurchaseId,
+            packageInfo: { id: pkg.id, name: pkg.name, price: pkg.price, type: pkg.type },
+            requiredAmount: pkg.price,
+            amountPaid: 0,
+            outstandingAmount: pkg.price,
+            status: 'pending'
+          },
+          ...prev.filter((purchase) => purchase.id !== response.data.botPurchaseId)
+        ]);
+      }
+
+      setMessage({ type: 'success', text: msgText });
       paymentWatchRef.current?.();
-      paymentWatchRef.current = watchPaymentStatus(response.data.checkoutRequestId, (status) => {
+      paymentWatchRef.current = watchPaymentStatus(response.data.checkoutRequestId, async (status) => {
         if (status === 'success') {
-          setMessage({ type: 'success', text: 'Payment completed successfully. Your bot session is now active.' });
-          setTimeout(() => window.location.reload(), 1000);
+          const successMsg = isPartial 
+            ? 'Payment recorded! Your mentor will reconcile the remaining amount.'
+            : 'Payment completed successfully. Your bot session is now active.';
+          setMessage({ type: 'success', text: successMsg });
+          if (isPartial) {
+            await fetchPendingPurchases();
+          } else {
+            setTimeout(() => window.location.reload(), 1000);
+          }
         }
         if (status === 'failed') {
           setMessage({ type: 'error', text: 'Payment failed or was cancelled. Please try again.' });
@@ -123,6 +165,48 @@ export default function ForexBot() {
       {message && (
         <div className={`p-4 rounded-xl border ${message.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
           {message.text}
+        </div>
+      )}
+
+      {botPurchases.length > 0 && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-3xl p-6">
+          <div className="flex items-start gap-3 mb-4">
+            <AlertCircle className="text-yellow-500 mt-1" size={24} />
+            <div>
+              <h3 className="text-lg font-bold text-white">Pending Purchases</h3>
+              <p className="text-sm text-gray-400">Complete these purchases or wait for your mentor to reconcile the remainder.</p>
+            </div>
+          </div>
+          
+          <div className="space-y-3">
+            {botPurchases.map((purchase) => (
+              <div key={purchase.id} className="bg-black/30 border border-white/10 rounded-xl p-4 flex items-center justify-between">
+                <div className="flex-1">
+                  <p className="text-white font-semibold">{purchase.packageInfo?.name || 'Bot'}</p>
+                  <p className="text-sm text-gray-400">
+                    {formatCurrency(purchase.amountPaid, profile?.preferredCurrency)} of {formatCurrency(purchase.requiredAmount, profile?.preferredCurrency)} paid
+                  </p>
+                  <div className="w-full bg-white/10 rounded-full h-2 mt-2">
+                    <div 
+                      className="bg-cyan-500 h-2 rounded-full transition-all" 
+                      style={{ width: `${(purchase.amountPaid / purchase.requiredAmount) * 100}%` }}
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setAmountInputs(prev => ({ ...prev, [purchase.packageInfo?.id]: purchase.outstandingAmount }));
+                    setPhoneInputs(prev => ({ ...prev, [purchase.packageInfo?.id]: phoneInputs[purchase.packageInfo?.id] || profile?.phoneNumber || '' }));
+                    handlePurchase(purchase.packageInfo?.id, true, purchase.id);
+                  }}
+                  disabled={purchasing === purchase.packageInfo?.id}
+                  className="ml-4 px-4 py-2 bg-cyan-500 text-white rounded-lg font-semibold hover:bg-cyan-600 transition-all whitespace-nowrap disabled:opacity-50"
+                >
+                  {purchasing === purchase.packageInfo?.id ? 'Processing...' : 'Complete Payment'}
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
