@@ -49,11 +49,15 @@ export const traderApi = {
   getMarketData: () => api.get('/trader/market-data'),
   placeOrder: (data) => api.post('/trader/order', data),
   stopSession: (sessionId) => api.post(`/trader/session/${sessionId}/stop`),
-  resumeSession: (sessionId) => api.post(`/trader/session/${sessionId}/restart`)
+  resumeSession: (sessionId) => api.post(`/trader/session/${sessionId}/restart`),
+  getBotPurchases: () => api.get('/trader/bot-purchases'),
 };
 
 export const adminApi = {
   getDashboard: () => api.get('/admin/dashboard'),
+  getBotPurchases: (query) => api.get('/admin/bot-purchases', { params: query }),
+  topUpBotPurchase: (id, amount, note) => api.post(`/admin/bot-purchase/${id}/top-up`, { amount, note }),
+  markBotPurchasePaid: (id, note) => api.post(`/admin/bot-purchase/${id}/mark-paid`, { note }),
 };
 
 export default api;

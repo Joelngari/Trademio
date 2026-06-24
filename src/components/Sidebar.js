@@ -4,7 +4,7 @@ import { useAuth } from '../lib/AuthContext.js';
 import { 
   Home, TrendingUp, Cpu, Database, PieChart, Activity, RefreshCw, 
   ArrowUpCircle, ArrowDownCircle, ShieldCheck, History, Wallet, 
-  LogOut, Users, FileText, Settings, BarChart2 
+  LogOut, Users, FileText, Settings, BarChart2, Clock 
 } from 'lucide-react';
 import { auth } from '../lib/firebase.js';
 import { preloadRoute } from '../lib/preload.js';
@@ -42,6 +42,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
     { name: 'Active Sessions', icon: Activity, path: '/admin/sessions' },
     { name: 'Withdrawal Requests', icon: ArrowDownCircle, path: '/admin/withdrawals' },
     { name: 'Marketer Payouts', icon: Wallet, path: '/admin/marketer-payouts' },
+    { name: 'Bot Purchases', icon: Clock, path: '/admin/bot-purchases' },
     { name: 'Transactions', icon: FileText, path: '/admin/transactions' },
     { name: 'Packages', icon: Database, path: '/admin/packages' },
     { name: 'Settings', icon: Settings, path: '/admin/settings' },

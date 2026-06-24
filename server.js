@@ -276,31 +276,127 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
   }
 });
 
+// --- HELPER: Activate bot purchase (handles all bot types) ---
+// This is called when a botPurchase becomes fully paid, either via STK callback or admin action.
+async function activateBotPurchase(traderRef, pkg, botPurchaseRef, marketerId, t, transactionId) {
+  // Handle type-specific activation
+  if (pkg.type === 'withdrawal-bot') {
+    // Set withdrawal bot tier and max amount on trader
+    t.update(traderRef, {
+      withdrawalBotTier: pkg.tier,
+      withdrawalBotMaxAmount: pkg.maxAmount,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+  } else if (['forex', 'crypto', 'mining', 'investment', 'lifespan'].includes(pkg.type)) {
+    // Create session for trading bots
+    let durationMs = (pkg.duration || 60) * 60 * 1000;
+    if (pkg.type === 'investment' || pkg.type === 'lifespan') {
+      durationMs = (pkg.duration || 1) * 24 * 60 * 60 * 1000;
+    }
+
+    const sessionRef = adminDb.collection('sessions').doc();
+    const startedAt = Date.now();
+    const endsAt = startedAt + durationMs;
+
+    const sessionData = {
+      id: sessionRef.id,
+      traderId: traderRef.id,
+      marketerId: marketerId,
+      type: pkg.type,
+      planName: pkg.name,
+      amountPaid: pkg.price, // Use package price (full amount)
+      expectedReturn: pkg.expectedReturn,
+      totalDurationMs: durationMs,
+      startedAt,
+      endsAt,
+      status: 'active',
+      creditedAmount: 0,
+      lastAccruedAt: startedAt,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    t.set(sessionRef, sessionData);
+    t.update(traderRef, { 
+      activeSessionId: sessionRef.id,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+  }
+
+  // Mark botPurchase as paid and set activatedAt
+  t.update(botPurchaseRef, {
+    status: 'paid',
+    activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  invalidateCache('traders', 'sessions', 'botPurchases');
+}
+
 // --- PAYMENT ROUTES ---
 
 app.post('/api/payments/stk-push', authMiddleware, paymentLimiter, async (req, res) => {
   try {
-    const { packageId, phoneNumber, amount: customAmount } = req.body;
+    const { packageId, phoneNumber, amount: requestedAmount, botPurchaseId } = req.body;
     
     let amount;
     let description;
     let type;
     let metadata = {};
+    let botPurchaseRef = null;
 
     if (packageId) {
       const pkg = await adminDb.collection('packages').doc(packageId).get();
       if (!pkg.exists) return res.status(404).json({ message: 'Package not found' });
       const pkgData = pkg.data();
-      amount = pkgData.price;
-      description = `Purchase of ${pkgData.name}`;
-      type = pkgData.type;
-      metadata = { packageId };
-    } else if (customAmount) {
-      amount = customAmount;
+      
+      // Check if partial payment: requestedAmount < package price
+      if (requestedAmount && requestedAmount > 0 && requestedAmount < pkgData.price) {
+        // Partial payment for a bot
+        if (['withdrawal-bot', 'forex', 'crypto', 'mining', 'investment', 'lifespan'].includes(pkgData.type)) {
+          amount = requestedAmount;
+          
+          // If botPurchaseId provided, link to existing botPurchase (resuming payment)
+          if (botPurchaseId) {
+            botPurchaseRef = adminDb.collection('botPurchases').doc(botPurchaseId);
+          } else {
+            // Create new botPurchase for this partial payment
+            botPurchaseRef = adminDb.collection('botPurchases').doc();
+            await botPurchaseRef.set({
+              id: botPurchaseRef.id,
+              traderId: req.user.uid,
+              packageId: packageId,
+              type: pkgData.type,
+              requiredAmount: pkgData.price,
+              amountPaid: 0,
+              contributors: [],
+              status: 'pending',
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+          }
+          
+          metadata = { packageId, botPurchaseId: botPurchaseRef.id };
+          description = `Partial payment for ${pkgData.name} (${amount}/${pkgData.price})`;
+          type = pkgData.type;
+        } else {
+          return res.status(400).json({ message: 'Partial payments only supported for bots' });
+        }
+      } else {
+        // Full payment or default
+        amount = requestedAmount || pkgData.price;
+        description = `Purchase of ${pkgData.name}`;
+        type = pkgData.type;
+        metadata = { packageId };
+      }
+    } else {
+      // Deposit or custom amount
+      amount = requestedAmount;
       description = 'Deposit to account';
       type = 'deposit';
-    } else {
-      return res.status(400).json({ message: 'Invalid payment request' });
+    }
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: 'Invalid payment amount' });
     }
 
     // Create pending transaction
@@ -317,7 +413,7 @@ app.post('/api/payments/stk-push', authMiddleware, paymentLimiter, async (req, r
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    console.log('📤 STK push request starting', { phoneNumber, amount, transactionRefId: transactionRef.id, description });
+    console.log('📤 STK push request starting', { phoneNumber, amount, transactionRefId: transactionRef.id, description, botPurchaseId: metadata.botPurchaseId });
     const result = await initiateStkPush(phoneNumber, amount, transactionRef.id, description);
     console.log('📤 STK push initiation completed', { checkoutRequestId: result.CheckoutRequestID, response: result });
     
@@ -459,22 +555,52 @@ app.post('/api/payments/callback', async (req, res) => {
       const mpesaReceiptNumber = items.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
       console.log('✅ STK callback success, updating transaction', { checkoutRequestId, mpesaReceiptNumber });
 
-      const splitResult = await handleSuccessfulPayment(transactionDoc.ref, transData, mpesaReceiptNumber);
-      await markCallbackProcessed(adminDb, checkoutRequestId);
+      // Check if this transaction is for a botPurchase (partial or full bot payment)
+      if (transData.metadata?.botPurchaseId) {
+        const splitResult = await handleBotPurchasePayment(transactionDoc.ref, transData, mpesaReceiptNumber);
+        await markCallbackProcessed(adminDb, checkoutRequestId);
 
-      try {
-        const traderDoc = await adminDb.collection('traders').doc(transData.traderId).get();
-        await sendSuccessfulPaymentEmail({
-          ...transData,
-          id: transactionDoc.id,
-          mpesaReceiptNumber,
-          phoneNumber: transData.phoneNumber || null
-        }, traderDoc.data());
-      } catch (emailError) {
-        console.error('Notification email error:', emailError);
+        try {
+          const traderDoc = await adminDb.collection('traders').doc(transData.traderId).get();
+          const botPurchaseDoc = await adminDb.collection('botPurchases').doc(transData.metadata.botPurchaseId).get();
+          const botPurchaseData = botPurchaseDoc.data();
+          
+          let emailSubject = 'Payment received';
+          if (botPurchaseData?.status === 'paid') {
+            emailSubject = `${botPurchaseData.type === 'withdrawal-bot' ? 'Withdrawal Bot' : 'Bot'} Purchase Activated`;
+          }
+          
+          await sendSuccessfulPaymentEmail({
+            ...transData,
+            id: transactionDoc.id,
+            mpesaReceiptNumber,
+            phoneNumber: transData.phoneNumber || null,
+            subject: emailSubject
+          }, traderDoc.data());
+        } catch (emailError) {
+          console.error('Notification email error:', emailError);
+        }
+
+        res.status(200).json(splitResult);
+      } else {
+        // Regular (full) purchase or deposit
+        const splitResult = await handleSuccessfulPayment(transactionDoc.ref, transData, mpesaReceiptNumber);
+        await markCallbackProcessed(adminDb, checkoutRequestId);
+
+        try {
+          const traderDoc = await adminDb.collection('traders').doc(transData.traderId).get();
+          await sendSuccessfulPaymentEmail({
+            ...transData,
+            id: transactionDoc.id,
+            mpesaReceiptNumber,
+            phoneNumber: transData.phoneNumber || null
+          }, traderDoc.data());
+        } catch (emailError) {
+          console.error('Notification email error:', emailError);
+        }
+
+        res.status(200).json(splitResult);
       }
-
-      res.status(200).json(splitResult);
     } else {
       console.warn('⚠️  STK callback failure result code', { checkoutRequestId, resultCode, resultDesc: stkCallback.ResultDesc });
       await transactionDoc.ref.update({ status: 'failed', failureReason: stkCallback.ResultDesc });
@@ -486,6 +612,105 @@ app.post('/api/payments/callback', async (req, res) => {
     res.status(500).send('Error');
   }
 });
+
+// Handle bot purchase payment (partial or full via STK callback)
+async function handleBotPurchasePayment(transRef, transData, mpesaReceiptNumber) {
+  return await adminDb.runTransaction(async (t) => {
+    const marketerId = transData.marketerId;
+    const botPurchaseId = transData.metadata.botPurchaseId;
+    const packageId = transData.metadata.packageId;
+    
+    let marketerCut = 0;
+    let adminCut = transData.totalAmount;
+    let marketerRef;
+    let marketerDoc;
+
+    if (marketerId !== 'ADMIN') {
+      marketerCut = transData.totalAmount * 0.85;
+      adminCut = transData.totalAmount * 0.15;
+      marketerRef = adminDb.collection('marketers').doc(marketerId);
+      marketerDoc = await t.get(marketerRef);
+    }
+
+    // Get bot purchase and package details
+    const botPurchaseRef = adminDb.collection('botPurchases').doc(botPurchaseId);
+    const botPurchaseDoc = await t.get(botPurchaseRef);
+    if (!botPurchaseDoc.exists) {
+      throw new Error('Bot purchase not found');
+    }
+    const botPurchaseData = botPurchaseDoc.data();
+
+    const pkgRef = adminDb.collection('packages').doc(packageId);
+    const pkgDoc = await t.get(pkgRef);
+    if (!pkgDoc.exists) {
+      throw new Error('Package not found');
+    }
+    const pkg = pkgDoc.data();
+
+    const traderRef = adminDb.collection('traders').doc(transData.traderId);
+
+    // 1. Update transaction status
+    t.update(transRef, {
+      status: 'success',
+      mpesaReceiptNumber,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // 2. Update marketer commission (if not admin)
+    if (marketerId !== 'ADMIN') {
+      if (!marketerDoc.exists) {
+        t.set(marketerRef, {
+          uid: marketerId,
+          commissionBalance: marketerCut,
+          totalEarned: marketerCut,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } else {
+        t.update(marketerRef, {
+          commissionBalance: admin.firestore.FieldValue.increment(marketerCut),
+          totalEarned: admin.firestore.FieldValue.increment(marketerCut)
+        });
+      }
+
+      const commissionRef = adminDb.collection('commissions').doc();
+      t.set(commissionRef, {
+        id: commissionRef.id,
+        marketerId,
+        traderId: transData.traderId,
+        depositAmount: transData.totalAmount,
+        commissionAmount: marketerCut,
+        adminAmount: adminCut,
+        type: transData.type,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    // 3. Increment botPurchase.amountPaid and add contributor
+    const newAmountPaid = botPurchaseData.amountPaid + transData.totalAmount;
+    const contributors = botPurchaseData.contributors || [];
+    contributors.push({
+      actor: 'trader',
+      amount: transData.totalAmount,
+      txnId: transRef.id,
+      createdAt: admin.firestore.Timestamp.fromDate(new Date())
+    });
+
+    t.update(botPurchaseRef, {
+      amountPaid: newAmountPaid,
+      contributors: contributors,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // 4. Check if fully paid and activate
+    if (newAmountPaid >= botPurchaseData.requiredAmount) {
+      // Bot purchase is fully funded!
+      await activateBotPurchase(traderRef, pkg, botPurchaseRef, marketerId, t, transRef.id);
+    }
+
+    invalidateCache('traders', 'marketers', 'transactions', 'commissions', 'sessions', 'botPurchases');
+    return { success: true, message: newAmountPaid >= botPurchaseData.requiredAmount ? 'Bot activated!' : 'Payment recorded' };
+  });
+}
 
 async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) {
   return await adminDb.runTransaction(async (t) => {
@@ -1452,6 +1677,226 @@ app.post('/api/admin/promote-to-marketer/:id', authMiddleware, roleMiddleware(['
     });
   } catch (error) {
     console.error('Promote to marketer error:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// --- BOT PURCHASE ADMIN ENDPOINTS ---
+
+// Get pending bot purchases
+app.get('/api/admin/bot-purchases', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { status = 'pending' } = req.query;
+    
+    let query = adminDb.collection('botPurchases');
+    if (status) {
+      query = query.where('status', '==', status);
+    }
+    
+    const snapshot = await query.orderBy('createdAt', 'desc').get();
+    const botPurchases = [];
+    
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      const traderSnap = await adminDb.collection('users').doc(data.traderId).get();
+      const pkgSnap = await adminDb.collection('packages').doc(data.packageId).get();
+      
+      botPurchases.push({
+        ...data,
+        traderInfo: traderSnap.exists ? { id: traderSnap.id, name: traderSnap.data().name, email: traderSnap.data().email } : null,
+        packageInfo: pkgSnap.exists ? { id: pkgSnap.id, name: pkgSnap.data().name, price: pkgSnap.data().price, type: pkgSnap.data().type } : null,
+        outstandingAmount: Math.max(0, data.requiredAmount - data.amountPaid)
+      });
+    }
+    
+    res.json({ botPurchases });
+  } catch (error) {
+    console.error('Get bot purchases error:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Get trader's pending bot purchases
+app.get('/api/trader/bot-purchases', authMiddleware, async (req, res) => {
+  try {
+    const traderId = req.user.uid;
+    const snapshot = await adminDb.collection('botPurchases')
+      .where('traderId', '==', traderId)
+      .where('status', '==', 'pending')
+      .orderBy('createdAt', 'desc')
+      .get();
+    
+    const botPurchases = [];
+    
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      const pkgSnap = await adminDb.collection('packages').doc(data.packageId).get();
+      
+      botPurchases.push({
+        ...data,
+        packageInfo: pkgSnap.exists ? { id: pkgSnap.id, name: pkgSnap.data().name, price: pkgSnap.data().price, type: pkgSnap.data().type } : null,
+        outstandingAmount: Math.max(0, data.requiredAmount - data.amountPaid)
+      });
+    }
+    
+    res.json({ botPurchases });
+  } catch (error) {
+    console.error('Get trader bot purchases error:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Admin: Top-up bot purchase
+app.post('/api/admin/bot-purchase/:id/top-up', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { amount, note } = req.body;
+    
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: 'Invalid top-up amount' });
+    }
+    
+    const result = await adminDb.runTransaction(async (t) => {
+      const botPurchaseRef = adminDb.collection('botPurchases').doc(id);
+      const botPurchaseDoc = await t.get(botPurchaseRef);
+      
+      if (!botPurchaseDoc.exists) {
+        throw new Error('Bot purchase not found');
+      }
+      
+      const botPurchaseData = botPurchaseDoc.data();
+      if (botPurchaseData.status !== 'pending') {
+        throw new Error('Bot purchase is not pending');
+      }
+      
+      // Get package and trader info
+      const pkgSnap = await t.get(adminDb.collection('packages').doc(botPurchaseData.packageId));
+      const pkg = pkgSnap.data();
+      const traderRef = adminDb.collection('traders').doc(botPurchaseData.traderId);
+      
+      // Create admin top-up transaction record
+      const transactionRef = adminDb.collection('transactions').doc();
+      t.set(transactionRef, {
+        id: transactionRef.id,
+        traderId: botPurchaseData.traderId,
+        marketerId: botPurchaseData.marketerId || 'ADMIN',
+        totalAmount: amount,
+        type: botPurchaseData.type,
+        status: 'success',
+        metadata: { botPurchaseId: id, adminTopUp: true },
+        adminNote: note || '',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      // Update bot purchase
+      const newAmountPaid = botPurchaseData.amountPaid + amount;
+      const contributors = botPurchaseData.contributors || [];
+      contributors.push({
+        actor: 'admin',
+        amount: amount,
+        txnId: transactionRef.id,
+        note: note || '',
+        createdAt: admin.firestore.Timestamp.fromDate(new Date())
+      });
+      
+      t.update(botPurchaseRef, {
+        amountPaid: newAmountPaid,
+        contributors: contributors,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      // If fully paid, activate the bot
+      if (newAmountPaid >= botPurchaseData.requiredAmount) {
+        await activateBotPurchase(traderRef, pkg, botPurchaseRef, botPurchaseData.marketerId || 'ADMIN', t, transactionRef.id);
+      }
+      
+      invalidateCache('botPurchases', 'traders', 'transactions');
+      
+      return {
+        success: true,
+        message: newAmountPaid >= botPurchaseData.requiredAmount ? 'Bot activated!' : 'Top-up recorded',
+        botPurchase: { id, amountPaid: newAmountPaid, outstandingAmount: Math.max(0, botPurchaseData.requiredAmount - newAmountPaid) }
+      };
+    });
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Top-up bot purchase error:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Admin: Mark bot purchase as fully paid
+app.post('/api/admin/bot-purchase/:id/mark-paid', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { note } = req.body;
+    
+    const result = await adminDb.runTransaction(async (t) => {
+      const botPurchaseRef = adminDb.collection('botPurchases').doc(id);
+      const botPurchaseDoc = await t.get(botPurchaseRef);
+      
+      if (!botPurchaseDoc.exists) {
+        throw new Error('Bot purchase not found');
+      }
+      
+      const botPurchaseData = botPurchaseDoc.data();
+      if (botPurchaseData.status !== 'pending') {
+        throw new Error('Bot purchase is not pending');
+      }
+      
+      const outstandingAmount = botPurchaseData.requiredAmount - botPurchaseData.amountPaid;
+      
+      // Get package and trader info
+      const pkgSnap = await t.get(adminDb.collection('packages').doc(botPurchaseData.packageId));
+      const pkg = pkgSnap.data();
+      const traderRef = adminDb.collection('traders').doc(botPurchaseData.traderId);
+      
+      // Create admin payment transaction record
+      const transactionRef = adminDb.collection('transactions').doc();
+      t.set(transactionRef, {
+        id: transactionRef.id,
+        traderId: botPurchaseData.traderId,
+        marketerId: botPurchaseData.marketerId || 'ADMIN',
+        totalAmount: outstandingAmount,
+        type: botPurchaseData.type,
+        status: 'success',
+        metadata: { botPurchaseId: id, adminMarkedPaid: true },
+        adminNote: note || 'Admin marked as fully paid',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      // Update bot purchase with final top-up
+      const contributors = botPurchaseData.contributors || [];
+      contributors.push({
+        actor: 'admin',
+        amount: outstandingAmount,
+        txnId: transactionRef.id,
+        note: note || 'Marked as paid by admin',
+        createdAt: admin.firestore.Timestamp.fromDate(new Date())
+      });
+      
+      t.update(botPurchaseRef, {
+        amountPaid: botPurchaseData.requiredAmount,
+        contributors: contributors,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      // Activate the bot
+      await activateBotPurchase(traderRef, pkg, botPurchaseRef, botPurchaseData.marketerId || 'ADMIN', t, transactionRef.id);
+      
+      invalidateCache('botPurchases', 'traders', 'transactions');
+      
+      return {
+        success: true,
+        message: 'Bot purchase marked as paid and bot activated',
+        botPurchase: { id, status: 'paid', amountPaid: botPurchaseData.requiredAmount }
+      };
+    });
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Mark paid bot purchase error:', error);
     res.status(400).json({ message: error.message });
   }
 });

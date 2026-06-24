@@ -25,6 +25,7 @@
     '/admin/marketer-payouts': () => import('../pages/admin/MarketerPayouts.js'),
     '/admin/transactions': () => import('../pages/admin/Transactions.js'),
     '/admin/packages': () => import('../pages/admin/Packages.js'),
+    '/admin/bot-purchases': () => import('../pages/admin/BotPurchases.js'),
     '/admin/settings': () => import('../pages/admin/Settings.js'),
   };
 

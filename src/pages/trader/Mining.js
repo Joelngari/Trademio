@@ -13,6 +13,7 @@ export default function Mining() {
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(null);
   const [phoneInputs, setPhoneInputs] = useState({});
+  const [amountInputs, setAmountInputs] = useState({});
   const [message, setMessage] = useState(null);
   const paymentWatchRef = useRef(null);
 
@@ -36,10 +37,17 @@ export default function Mining() {
 
   const handlePurchase = async (pkgId) => {
     if (activeSession) return;
+    const pkg = packages.find((item) => item.id === pkgId);
+    const amount = amountInputs[pkgId] || pkg?.price || 0;
+    if (!pkg) return;
+    if (amount <= 0 || amount > pkg.price) {
+      setMessage({ type: 'error', text: `Amount must be between 1 and ${formatCurrency(pkg.price, profile?.preferredCurrency)}` });
+      return;
+    }
     setPurchasing(pkgId);
     setMessage(null);
     try {
-      const response = await paymentApi.initiateStkPush({ packageId: pkgId, phoneNumber: phoneInputs[pkgId] || profile?.phoneNumber || '' });
+      const response = await paymentApi.initiateStkPush({ packageId: pkgId, amount, phoneNumber: phoneInputs[pkg.id] || profile?.phoneNumber || '' });
       setMessage({ type: 'success', text: 'STK push sent! Complete the payment to activate this mining rig.' });
       paymentWatchRef.current?.();
       paymentWatchRef.current = watchPaymentStatus(response.data.checkoutRequestId, (status) => {
@@ -122,6 +130,15 @@ export default function Mining() {
               </div>
 
               <div className="space-y-4 relative z-10">
+                <input
+                  type="number"
+                  min="1"
+                  max={pkg.price}
+                  value={amountInputs[pkg.id] ?? pkg.price}
+                  onChange={(e) => setAmountInputs((prev) => ({ ...prev, [pkg.id]: Number(e.target.value) }))}
+                  placeholder={`Amount (max ${formatCurrency(pkg.price, profile?.preferredCurrency)})`}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-[#87ceeb] outline-none"
+                />
                 <input
                   type="text"
                   value={phoneInputs[pkg.id] ?? ''}

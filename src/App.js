@@ -43,6 +43,7 @@ const MarketerPayouts = lazy(() => import('./pages/admin/MarketerPayouts.js'));
 const AdminTransactions = lazy(() => import('./pages/admin/Transactions.js'));
 const AdminPackages = lazy(() => import('./pages/admin/Packages.js'));
 const AdminSettings = lazy(() => import('./pages/admin/Settings.js'));
+const AdminBotPurchases = lazy(() => import('./pages/admin/BotPurchases.js'));
 
 function DashboardLayout({ children }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -136,6 +137,7 @@ export default function App() {
             <Route path="marketer-payouts" element={<MarketerPayouts />} />
             <Route path="transactions" element={<AdminTransactions />} />
             <Route path="packages" element={<AdminPackages />} />
+            <Route path="bot-purchases" element={<AdminBotPurchases />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
 
