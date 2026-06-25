@@ -355,24 +355,45 @@ app.post('/api/payments/stk-push', authMiddleware, paymentLimiter, async (req, r
         if (['withdrawal-bot', 'forex', 'crypto', 'mining', 'investment', 'lifespan'].includes(pkgData.type)) {
           amount = requestedAmount;
           
-          // If botPurchaseId provided, link to existing botPurchase (resuming payment)
+          // If botPurchaseId provided, validate and link to existing botPurchase (resuming payment)
           if (botPurchaseId) {
-            botPurchaseRef = adminDb.collection('botPurchases').doc(botPurchaseId);
+            const candidateRef = adminDb.collection('botPurchases').doc(botPurchaseId);
+            const candidateDoc = await candidateRef.get();
+            if (!candidateDoc.exists) {
+              return res.status(400).json({ message: 'Invalid botPurchaseId' });
+            }
+            const candidateData = candidateDoc.data();
+            if (candidateData.status !== 'pending') {
+              return res.status(400).json({ message: 'Bot purchase is not pending' });
+            }
+            botPurchaseRef = candidateRef;
           } else {
-            // Create new botPurchase for this partial payment
-            botPurchaseRef = adminDb.collection('botPurchases').doc();
-            await botPurchaseRef.set({
-              id: botPurchaseRef.id,
-              traderId: req.user.uid,
-              packageId: packageId,
-              type: pkgData.type,
-              requiredAmount: pkgData.price,
-              amountPaid: 0,
-              contributors: [],
-              status: 'pending',
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            });
+            // Try to find an existing pending botPurchase for this trader+package to avoid duplicates
+            const existingSnap = await adminDb.collection('botPurchases')
+              .where('traderId', '==', req.user.uid)
+              .where('packageId', '==', packageId)
+              .where('status', '==', 'pending')
+              .limit(1)
+              .get();
+
+            if (!existingSnap.empty) {
+              botPurchaseRef = adminDb.collection('botPurchases').doc(existingSnap.docs[0].id);
+            } else {
+              // Create new botPurchase for this partial payment
+              botPurchaseRef = adminDb.collection('botPurchases').doc();
+              await botPurchaseRef.set({
+                id: botPurchaseRef.id,
+                traderId: req.user.uid,
+                packageId: packageId,
+                type: pkgData.type,
+                requiredAmount: pkgData.price,
+                amountPaid: 0,
+                contributors: [],
+                status: 'pending',
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+              });
+            }
           }
           
           metadata = { packageId, botPurchaseId: botPurchaseRef.id };

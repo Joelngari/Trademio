@@ -231,12 +231,15 @@ export default function Mining() {
                   className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:border-[#87ceeb] outline-none"
                 />
                 <button
-                  disabled={activeSession || purchasing === pkg.id}
+                  disabled={activeSession || purchasing === pkg.id || botPurchases.some(bp => bp.packageInfo?.id === pkg.id)}
                   onClick={() => handlePurchase(pkg.id)}
                   className={`w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${activeSession ? 'bg-white/5 text-gray-500 cursor-not-allowed' : 'bg-[#87ceeb] text-[#0a0a0a] hover:bg-[#76b9d6]'}`}
                 >
-                  {purchasing === pkg.id ? <Loader2 className="animate-spin" /> : activeSession ? 'Active Rig Running' : 'Rent Rig'}
+                  {botPurchases.some(bp => bp.packageInfo?.id === pkg.id) ? 'Pending Purchase Exists' : (purchasing === pkg.id ? <Loader2 className="animate-spin" /> : activeSession ? 'Active Rig Running' : 'Rent Rig')}
                 </button>
+                {botPurchases.some(bp => bp.packageInfo?.id === pkg.id) && (
+                  <div className="mt-3 text-sm text-yellow-300">You have a pending purchase for this plan — resume from the Pending Purchases panel.</div>
+                )}
               </div>
             </div>
           ))}

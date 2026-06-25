@@ -234,16 +234,22 @@ export default function WithdrawalBot() {
                  </li>
                </ul>
 
-               <div className="space-y-4 mt-auto">
-                 {!isCurrent && (
-                   <>
-                     <input 
-                      type="text" 
-                      value={phoneInputs[pkg.id] ?? ''}
-                      onChange={(e) => setPhoneInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
-                      placeholder="M-Pesa Number"
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:border-[#87ceeb] outline-none"
-                     />
+              <div className="space-y-4 mt-auto">
+                     {!isCurrent && (
+                       <>
+                         <input 
+                          type="text" 
+                          value={phoneInputs[pkg.id] ?? ''}
+                          onChange={(e) => setPhoneInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
+                          placeholder="M-Pesa Number"
+                          className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:border-[#87ceeb] outline-none"
+                         />
+                         {/* Resume banner: if there's an existing pending purchase for this package, show prompt */}
+                         {botPurchases.some(bp => bp.packageInfo?.id === pkg.id) && (
+                           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-sm text-yellow-200">
+                             You have a pending purchase for this plan. Resume it from the Pending Purchases panel above to avoid creating duplicates.
+                           </div>
+                         )}
                      <div>
                        <label className="text-xs text-gray-400 block mb-2">Payment Amount</label>
                        <input 
