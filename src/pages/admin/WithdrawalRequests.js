@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../lib/firebase.js';
-import { collection, query, where, onSnapshot, doc, updateDoc, increment } from 'firebase/firestore';
 import { formatKSh } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
-import { ArrowDownCircle, Check, X, Clock, AlertCircle } from 'lucide-react';
-import api from '../../services/api.js';
+import { Check, X, Clock3, Zap, RefreshCcw } from 'lucide-react';
+import { adminApi } from '../../services/api.js';
 
 export default function WithdrawalRequests() {
   const [requests, setRequests] = useState([]);
@@ -12,31 +10,59 @@ export default function WithdrawalRequests() {
   const [tab, setTab] = useState('pending');
 
   useEffect(() => {
-    const q = query(collection(db, 'withdrawals'), where('status', '==', tab));
-    const unsub = onSnapshot(q, (snapshot) => {
-      setRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    });
-    return () => unsub();
+    const fetchWithdrawals = async () => {
+      try {
+        const response = await adminApi.getWithdrawals({ status: tab === 'all' ? undefined : tab });
+        setRequests(response.data.withdrawals || []);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchWithdrawals();
   }, [tab]);
 
-  const handleApprove = async (req) => {
-    if (!window.confirm('Approve this withdrawal? This will deduct the trader balance for manual processing.')) return;
+  const handleAdvance = async (req) => {
+    const note = window.prompt('Add a note for the next stage:');
+    if (note === null) return;
     try {
-      await api.post(`/admin/payouts/approve/${req.id}`);
-      alert('Withdrawal approved for manual processing');
+      await adminApi.advanceWithdrawal(req.id, { note });
+      alert('Withdrawal moved forward successfully');
+      setLoading(true);
+      const response = await adminApi.getWithdrawals({ status: tab === 'all' ? undefined : tab });
+      setRequests(response.data.withdrawals || []);
     } catch (err) {
       alert('Failed: ' + (err.response?.data?.message || err.message));
     }
   };
 
-  const handleReject = async (reqId) => {
+  const handleExtend = async (req) => {
+    const hours = Number(window.prompt('Extend review window by how many hours?', '24'));
+    if (!hours || Number.isNaN(hours)) return;
+    try {
+      await adminApi.extendWithdrawal(req.id, { hours });
+      alert('Withdrawal timeline extended');
+      setLoading(true);
+      const response = await adminApi.getWithdrawals({ status: tab === 'all' ? undefined : tab });
+      setRequests(response.data.withdrawals || []);
+    } catch (err) {
+      alert('Failed: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleReject = async (req) => {
     const note = window.prompt('Reason for rejection:');
     if (note === null) return;
     try {
-      await updateDoc(doc(db, 'withdrawals', reqId), { status: 'review', adminNote: note });
+      await adminApi.rejectWithdrawal(req.id, { note });
+      alert('Withdrawal rejected');
+      setLoading(true);
+      const response = await adminApi.getWithdrawals({ status: tab === 'all' ? undefined : tab });
+      setRequests(response.data.withdrawals || []);
     } catch (err) {
-      alert('Failed to reject');
+      alert('Failed: ' + (err.response?.data?.message || err.message));
     }
   };
 
@@ -49,8 +75,8 @@ export default function WithdrawalRequests() {
         <p className="text-gray-400">Review and process trader fund withdrawals.</p>
       </div>
 
-      <div className="flex gap-2 p-1 bg-white/5 rounded-xl w-max">
-        {['pending', 'approved', 'review'].map((t) => (
+      <div className="flex gap-2 p-1 bg-white/5 rounded-xl w-max flex-wrap">
+        {['pending', 'ready_for_processing_by_platform', 'pending_processing_by_platform', 'in_processing', 'paid', 'rejected', 'all'].map((t) => (
           <button
             key={t}
             onClick={() => {setTab(t); setLoading(true);}}
@@ -70,8 +96,8 @@ export default function WithdrawalRequests() {
                 <th className="px-6 py-5">Phone</th>
                 <th className="px-6 py-5">Amount</th>
                 <th className="px-6 py-5">Requested At</th>
-                <th className="px-6 py-5">Status Note</th>
-                {tab === 'pending' && <th className="px-6 py-5 text-right">Actions</th>}
+                <th className="px-6 py-5">Status</th>
+                <th className="px-6 py-5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 text-sm">
@@ -90,29 +116,49 @@ export default function WithdrawalRequests() {
                        <span className="text-xl font-bold text-white">{formatKSh(r.amount)}</span>
                     </td>
                     <td className="px-6 py-4 text-xs text-gray-500">
-                       {r.requestedAt?.toDate().toLocaleString()}
+                       {r.requestedAt ? new Date(r.requestedAt).toLocaleString() : 'Unknown'}
                     </td>
                     <td className="px-6 py-4 text-xs text-gray-400">
-                      {r.mpesaReceiptNumber || r.adminNote || '—'}
+                      <div className="space-y-1">
+                        <div className="font-semibold text-white">{r.statusLabel || r.status}</div>
+                        <div className="flex items-center gap-2 text-gray-500">
+                          <Clock3 size={12} />
+                          {r.nextActionAt ? new Date(r.nextActionAt).toLocaleString() : 'No deadline'}
+                        </div>
+                        <div className="text-gray-500">{r.adminNote || r.mpesaReceiptNumber || '—'}</div>
+                      </div>
                     </td>
-                    {tab === 'pending' && (
-                      <td className="px-6 py-4 text-right">
-                         <div className="flex justify-end gap-2">
-                           <button 
-                            onClick={() => handleApprove(r)}
-                            className="p-2 bg-green-500/10 text-green-500 hover:bg-green-500/20 rounded-lg border border-green-500/20"
-                           >
-                             <Check size={16} />
-                           </button>
-                           <button 
-                            onClick={() => handleReject(r.id)}
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2 flex-wrap">
+                        {r.status !== 'paid' && r.status !== 'rejected' && (
+                          <>
+                            <button 
+                              onClick={() => handleAdvance(r)}
+                              className="p-2 bg-green-500/10 text-green-500 hover:bg-green-500/20 rounded-lg border border-green-500/20"
+                              title="Advance to next stage"
+                            >
+                              <Check size={16} />
+                            </button>
+                            <button 
+                              onClick={() => handleExtend(r)}
+                              className="p-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 rounded-lg border border-blue-500/20"
+                              title="Extend review window"
+                            >
+                              <RefreshCcw size={16} />
+                            </button>
+                          </>
+                        )}
+                        {r.status !== 'paid' && r.status !== 'rejected' && (
+                          <button 
+                            onClick={() => handleReject(r)}
                             className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-lg border border-red-500/20"
-                           >
-                             <X size={16} />
-                           </button>
-                         </div>
-                      </td>
-                    )}
+                            title="Reject request"
+                          >
+                            <X size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}

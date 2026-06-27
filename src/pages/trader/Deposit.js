@@ -46,7 +46,7 @@ export default function Deposit() {
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-white mb-2">Deposit Funds</h1>
-        <p className="text-gray-400">Load your Deposit Balance to activate bots and mining rigs instantly.</p>
+        <p className="text-gray-400">Load your Deposit Balance to start trading, activate bots and mining rigs instantly.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

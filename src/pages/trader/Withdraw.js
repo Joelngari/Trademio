@@ -3,7 +3,7 @@ import { useAuth } from '../../lib/AuthContext.js';
 import { traderApi } from '../../services/api.js';
 import { formatCurrency } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
-import { ArrowDownCircle, ShieldCheck, AlertCircle, Loader2, Info } from 'lucide-react';
+import { ArrowDownCircle, ShieldCheck, AlertCircle, Loader2, Clock3 } from 'lucide-react';
 import api from '../../services/api.js';
 
 export default function Withdraw() {
@@ -14,15 +14,19 @@ export default function Withdraw() {
   const [phone, setPhone] = useState(profile?.phoneNumber || '');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
+  const [withdrawals, setWithdrawals] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await traderApi.getDashboard();
-        setData(response.data);
+        const [dashboardResponse, withdrawalsResponse] = await Promise.all([
+          traderApi.getDashboard(),
+          traderApi.getWithdrawals()
+        ]);
+        setData(dashboardResponse.data);
+        setWithdrawals(withdrawalsResponse.data.withdrawals || []);
       } catch (err) {
         console.error(err);
-        // Silently log fetch errors
       } finally {
         setLoading(false);
       }
@@ -58,7 +62,9 @@ export default function Withdraw() {
 
     try {
       await api.post('/trader/withdraw', { amount, phoneNumber: phone });
-      setMessage({ type: 'success', text: 'Withdrawal request submitted! Admin will review and process shortly.' });
+      const withdrawalsResponse = await traderApi.getWithdrawals();
+      setWithdrawals(withdrawalsResponse.data.withdrawals || []);
+      setMessage({ type: 'success', text: 'Withdrawal request submitted! Your request is now under review and will move through the platform processing stages.' });
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to submit request' });
     } finally {
@@ -70,6 +76,20 @@ export default function Withdraw() {
 
   const trader = data.trader;
   const currency = profile?.preferredCurrency || 'KES';
+
+  const getCountdown = (nextActionAt) => {
+    if (!nextActionAt) return null;
+    const target = new Date(nextActionAt);
+    const diff = target.getTime() - Date.now();
+
+    if (diff <= 0) {
+      return 'The current review window has closed.';
+    }
+
+    const hours = Math.max(0, Math.floor(diff / (1000 * 60 * 60)));
+    const minutes = Math.max(0, Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)));
+    return `${hours}h ${minutes}m remaining`;
+  };
 
   return (
     <div className="space-y-8">
@@ -170,6 +190,32 @@ export default function Withdraw() {
                   </div>
                 </div>
              </div>
+          </div>
+
+          <div className="bg-[#121212] border border-white/5 rounded-3xl p-8">
+            <h3 className="font-bold text-white mb-4">Recent Withdrawal Requests</h3>
+            {withdrawals.length === 0 ? (
+              <p className="text-sm text-gray-500">No withdrawals yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {withdrawals.slice(0, 3).map((item) => (
+                  <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-white">KSh {Number(item.amount || 0).toLocaleString()}</p>
+                        <p className="text-xs text-gray-500">{item.statusLabel || 'Pending review'}</p>
+                      </div>
+                      <div className="text-right text-xs text-gray-400">
+                        <div className="flex items-center gap-1 justify-end">
+                          <Clock3 size={12} />
+                          {getCountdown(item.nextActionAt) || 'Awaiting update'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="bg-[#121212] border border-white/5 rounded-3xl p-8">

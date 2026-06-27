@@ -2114,23 +2114,295 @@ async function seedAdminUser() {
 
 // --- WITHDRAWAL & PAYOUT ROUTES ---
 
+const WITHDRAWAL_STATUS_ORDER = ['pending', 'ready_for_processing_by_platform', 'pending_processing_by_platform', 'in_processing', 'paid'];
+
+const getWithdrawalStatusLabel = (status) => ({
+  pending: 'Pending review',
+  ready_for_processing_by_platform: 'Ready for platform processing',
+  pending_processing_by_platform: 'Pending platform processing',
+  in_processing: 'In processing',
+  paid: 'Paid',
+  rejected: 'Rejected'
+}[status] || 'Unknown');
+
+const getNextWithdrawalStatus = (currentStatus) => {
+  const currentIndex = WITHDRAWAL_STATUS_ORDER.indexOf(currentStatus);
+  if (currentIndex === -1 || currentIndex >= WITHDRAWAL_STATUS_ORDER.length - 1) {
+    return null;
+  }
+  return WITHDRAWAL_STATUS_ORDER[currentIndex + 1];
+};
+
+const getReviewDeadline = (hours = 24) => admin.firestore.Timestamp.fromDate(new Date(Date.now() + hours * 60 * 60 * 1000));
+const serializeTimestamp = (value) => (value && typeof value.toDate === 'function' ? value.toDate().toISOString() : value || null);
+const serializeWithdrawal = (data) => ({
+  ...data,
+  requestedAt: serializeTimestamp(data.requestedAt),
+  nextActionAt: serializeTimestamp(data.nextActionAt),
+  lastUpdatedAt: serializeTimestamp(data.lastUpdatedAt),
+  approvedAt: serializeTimestamp(data.approvedAt),
+  paidAt: serializeTimestamp(data.paidAt),
+  rejectedAt: serializeTimestamp(data.rejectedAt),
+  resolvedAt: serializeTimestamp(data.resolvedAt),
+  statusLabel: getWithdrawalStatusLabel(data.status)
+});
+
+app.get('/api/admin/withdrawals', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { status } = req.query;
+    let query = adminDb.collection('withdrawals');
+
+    if (status) {
+      query = query.where('status', '==', status);
+    }
+
+    const snapshot = await query.orderBy('requestedAt', 'desc').get();
+    const withdrawals = snapshot.docs.map((doc) => serializeWithdrawal({ id: doc.id, ...doc.data() }));
+
+    res.json({ withdrawals });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.get('/api/trader/withdrawals', authMiddleware, roleMiddleware(['trader']), async (req, res) => {
+  try {
+    const snapshot = await adminDb.collection('withdrawals')
+      .where('traderId', '==', req.user.uid)
+      .get();
+
+    const withdrawals = snapshot.docs
+      .map((doc) => serializeWithdrawal({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => (new Date(b.requestedAt || 0).getTime() || 0) - (new Date(a.requestedAt || 0).getTime() || 0));
+
+    res.json({ withdrawals });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
 app.post('/api/trader/withdraw', authMiddleware, roleMiddleware(['trader']), async (req, res) => {
   try {
     const data = withdrawalSchema.parse(req.body);
-    
+    const reviewHours = Number(req.body.reviewHours || process.env.WITHDRAWAL_REVIEW_WINDOW_HOURS || 24);
+
     const withdrawalRef = adminDb.collection('withdrawals').doc();
+    const nextActionAt = getReviewDeadline(reviewHours);
+
     await withdrawalRef.set({
       id: withdrawalRef.id,
       traderId: req.user.uid,
       amount: data.amount,
       phoneNumber: data.phoneNumber,
       status: 'pending',
-      requestedAt: admin.firestore.FieldValue.serverTimestamp()
+      reviewWindowHours: reviewHours,
+      nextActionAt,
+      requestedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    res.json({ message: 'Withdrawal requested successfully' });
+    res.json({
+      message: 'Withdrawal requested successfully',
+      withdrawal: {
+        id: withdrawalRef.id,
+        amount: data.amount,
+        phoneNumber: data.phoneNumber,
+        status: 'pending',
+        nextActionAt,
+        statusLabel: getWithdrawalStatusLabel('pending')
+      }
+    });
   } catch (error) {
     res.status(400).json({ message: error.message });
+  }
+});
+
+app.post('/api/admin/withdrawals/:requestId/extend', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { hours = 24, note } = req.body;
+
+    if (!hours || hours <= 0) {
+      return res.status(400).json({ message: 'Invalid extension length' });
+    }
+
+    const withdrawalRef = adminDb.collection('withdrawals').doc(requestId);
+    const withdrawalDoc = await withdrawalRef.get();
+
+    if (!withdrawalDoc.exists) {
+      return res.status(404).json({ message: 'Request not found' });
+    }
+
+    const withdrawal = withdrawalDoc.data();
+    if (withdrawal.status === 'paid' || withdrawal.status === 'rejected') {
+      return res.status(400).json({ message: 'This request is already closed' });
+    }
+
+    await withdrawalRef.update({
+      reviewWindowHours: hours,
+      nextActionAt: getReviewDeadline(hours),
+      adminNote: note || `Extended by admin for ${hours} hours`,
+      lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    invalidateCache('withdrawals');
+    res.json({ message: 'Withdrawal timeline extended', withdrawalId: requestId });
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Failed to extend withdrawal' });
+  }
+});
+
+app.post('/api/admin/withdrawals/:requestId/advance', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { note, mpesaReceiptNumber } = req.body;
+
+    const result = await adminDb.runTransaction(async (t) => {
+      const withdrawalRef = adminDb.collection('withdrawals').doc(requestId);
+      const withdrawalDoc = await t.get(withdrawalRef);
+
+      if (!withdrawalDoc.exists) {
+        throw new Error('Request not found');
+      }
+
+      const withdrawal = withdrawalDoc.data();
+      if (withdrawal.status === 'paid' || withdrawal.status === 'rejected') {
+        throw new Error('Request already completed');
+      }
+
+      const nextStatus = getNextWithdrawalStatus(withdrawal.status);
+      if (!nextStatus) {
+        throw new Error('Request already completed');
+      }
+
+      const updateData = {
+        status: nextStatus,
+        adminNote: note || `Advanced to ${getWithdrawalStatusLabel(nextStatus)}`,
+        lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      if (nextStatus === 'paid') {
+        const traderRef = adminDb.collection('traders').doc(withdrawal.traderId);
+        const traderDoc = await t.get(traderRef);
+        const trader = traderDoc.data();
+
+        if (!trader || (trader.tradingBalance || 0) < withdrawal.amount) {
+          throw new Error('Insufficient trader balance');
+        }
+
+        t.update(traderRef, {
+          tradingBalance: admin.firestore.FieldValue.increment(-withdrawal.amount)
+        });
+
+        updateData.paidAt = admin.firestore.FieldValue.serverTimestamp();
+        updateData.mpesaReceiptNumber = mpesaReceiptNumber || withdrawal.mpesaReceiptNumber || null;
+      } else {
+        updateData.nextActionAt = getReviewDeadline(withdrawal.reviewWindowHours || 24);
+      }
+
+      t.update(withdrawalRef, updateData);
+
+      return {
+        success: true,
+        message: `Withdrawal moved to ${getWithdrawalStatusLabel(nextStatus)}`,
+        withdrawal: { id: requestId, status: nextStatus }
+      };
+    });
+
+    invalidateCache('withdrawals', 'traders');
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Failed to advance withdrawal' });
+  }
+});
+
+app.post('/api/admin/withdrawals/:requestId/reject', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { note } = req.body;
+
+    const withdrawalRef = adminDb.collection('withdrawals').doc(requestId);
+    const withdrawalDoc = await withdrawalRef.get();
+
+    if (!withdrawalDoc.exists) {
+      return res.status(404).json({ message: 'Request not found' });
+    }
+
+    const withdrawal = withdrawalDoc.data();
+    if (withdrawal.status === 'paid' || withdrawal.status === 'rejected') {
+      return res.status(400).json({ message: 'This request is already closed' });
+    }
+
+    await withdrawalRef.update({
+      status: 'rejected',
+      rejectedAt: admin.firestore.FieldValue.serverTimestamp(),
+      adminNote: note || 'Rejected by admin',
+      lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    invalidateCache('withdrawals');
+    res.json({ message: 'Withdrawal rejected', withdrawalId: requestId });
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Failed to reject withdrawal' });
+  }
+});
+
+app.post('/api/admin/payouts/approve/:requestId', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { note, mpesaReceiptNumber } = req.body;
+
+    const result = await adminDb.runTransaction(async (t) => {
+      const withdrawalRef = adminDb.collection('withdrawals').doc(requestId);
+      const withdrawalDoc = await t.get(withdrawalRef);
+
+      if (!withdrawalDoc.exists) {
+        throw new Error('Request not found');
+      }
+
+      const withdrawal = withdrawalDoc.data();
+      const nextStatus = getNextWithdrawalStatus(withdrawal.status);
+      if (!nextStatus) {
+        throw new Error('Request already completed');
+      }
+
+      const updateData = {
+        status: nextStatus,
+        adminNote: note || `Advanced to ${getWithdrawalStatusLabel(nextStatus)}`,
+        lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      if (nextStatus === 'paid') {
+        const traderRef = adminDb.collection('traders').doc(withdrawal.traderId);
+        const traderDoc = await t.get(traderRef);
+        const trader = traderDoc.data();
+
+        if (!trader || (trader.tradingBalance || 0) < withdrawal.amount) {
+          throw new Error('Insufficient trader balance');
+        }
+
+        t.update(traderRef, {
+          tradingBalance: admin.firestore.FieldValue.increment(-withdrawal.amount)
+        });
+        updateData.paidAt = admin.firestore.FieldValue.serverTimestamp();
+        updateData.mpesaReceiptNumber = mpesaReceiptNumber || withdrawal.mpesaReceiptNumber || null;
+      } else {
+        updateData.nextActionAt = getReviewDeadline(withdrawal.reviewWindowHours || 24);
+      }
+
+      t.update(withdrawalRef, updateData);
+
+      return {
+        success: true,
+        message: `Withdrawal moved to ${getWithdrawalStatusLabel(nextStatus)}`,
+        withdrawal: { id: requestId, status: nextStatus }
+      };
+    });
+
+    invalidateCache('withdrawals', 'traders');
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Failed to advance withdrawal' });
   }
 });
 
@@ -2198,48 +2470,6 @@ app.post('/api/payouts/marketer', authMiddleware, roleMiddleware(['marketer']), 
   }
 });
 
-app.post('/api/admin/payouts/approve/:requestId', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
-  try {
-    const { requestId } = req.params;
-
-    await adminDb.runTransaction(async (t) => {
-      const withdrawalRef = adminDb.collection('withdrawals').doc(requestId);
-      const withdrawalDoc = await t.get(withdrawalRef);
-
-      if (!withdrawalDoc.exists) {
-        throw new Error('Request not found');
-      }
-
-      const withdrawal = withdrawalDoc.data();
-      if (withdrawal.status !== 'pending') {
-        throw new Error('Request already processed');
-      }
-
-      const traderRef = adminDb.collection('traders').doc(withdrawal.traderId);
-      const traderDoc = await t.get(traderRef);
-      const trader = traderDoc.data();
-
-      if (!trader || (trader.tradingBalance || 0) < withdrawal.amount) {
-        throw new Error('Insufficient trader balance');
-      }
-
-      t.update(traderRef, {
-        tradingBalance: admin.firestore.FieldValue.increment(-withdrawal.amount)
-      });
-
-      t.update(withdrawalRef, {
-        status: 'approved',
-        approvedAt: admin.firestore.FieldValue.serverTimestamp(),
-        adminNote: 'Approved for manual processing'
-      });
-    });
-
-    res.json({ message: 'Withdrawal approved for manual processing' });
-  } catch (error) {
-    res.status(400).json({ message: error.message || 'Failed to approve withdrawal' });
-  }
-});
-
 app.post('/api/payouts/callback', async (req, res) => {
    // Shared callback for both trader and marketer payouts
    console.log('✅ B2C callback endpoint hit', {
@@ -2293,14 +2523,14 @@ app.post('/api/payouts/callback', async (req, res) => {
             const params = Result.ResultParameters?.ResultParameter || [];
             const receipt = params.find(p => p.Key === 'TransactionID')?.Value;
             console.log('✅ B2C callback success for trader withdrawal', { conversationId, receipt });
-            await doc.ref.update({ status: 'approved', resolvedAt: admin.firestore.FieldValue.serverTimestamp(), mpesaReceiptNumber: receipt });
+            await doc.ref.update({ status: 'paid', paidAt: admin.firestore.FieldValue.serverTimestamp(), mpesaReceiptNumber: receipt, lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp() });
             // Deduct from trading balance
             await adminDb.collection('traders').doc(data.traderId).update({
                tradingBalance: admin.firestore.FieldValue.increment(-data.amount)
             });
          } else {
             console.log('⚠️  B2C callback failure for trader withdrawal', { conversationId, resultCode, desc: Result.ResultDesc });
-            await doc.ref.update({ status: 'review', adminNote: 'Payout failed: ' + Result.ResultDesc });
+            await doc.ref.update({ status: 'rejected', adminNote: 'Payout failed: ' + Result.ResultDesc, lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp() });
          }
       } else {
          console.warn('⚠️  B2C callback: no matching payout or withdrawal found', { conversationId });
