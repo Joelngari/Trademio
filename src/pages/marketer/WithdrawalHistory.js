@@ -35,7 +35,7 @@ export default function WithdrawalHistory() {
         <p className="text-gray-400">Status of all your previous commission payout requests.</p>
       </div>
 
-      <div className="bg-[#121212] border border-white/5 rounded-3xl overflow-hidden">
+      <div className="bg-[#121212] border border-white/5 rounded overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left font-medium">
             <thead>

@@ -35,7 +35,7 @@ export default function CommissionHistory() {
         <p className="text-gray-400">Chronological record of all earns from your recruiter pool.</p>
       </div>
 
-      <div className="bg-[#121212] border border-white/5 rounded-3xl overflow-hidden">
+      <div className="bg-[#121212] border border-white/5 rounded overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left font-medium">
             <thead>
@@ -59,7 +59,7 @@ export default function CommissionHistory() {
                   <tr key={c.id} className="hover:bg-white/[0.01] transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500">
+                        <div className="w-8 h-8 rounded bg-green-500/10 flex items-center justify-center text-green-500">
                            <DollarSign size={14} />
                         </div>
                         <div>

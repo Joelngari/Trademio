@@ -92,7 +92,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
                 onClick={() => setIsOpen(false)}
                 onMouseEnter={() => preloadRoute(link.path)}
                 className={({ isActive }) => `
-                  flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors
+                  flex items-center gap-3 px-4 py-3 rounded text-sm font-medium transition-colors
                   ${isActive ? 'bg-[#87ceeb]/10 text-[#87ceeb]' : 'text-gray-400 hover:bg-white/5 hover:text-white'}
                 `}
               >
@@ -105,7 +105,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           <div className="p-4 border-t border-white/5">
             <button 
               onClick={handleLogout}
-              className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+              className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-red-400 hover:bg-red-500/10 rounded transition-colors"
             >
               <LogOut size={18} />
               Logout

@@ -56,12 +56,12 @@ export default function MyTraders() {
             placeholder="Search by name or email..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="bg-[#121212] border border-white/5 rounded-xl pl-12 pr-6 py-3 text-white placeholder:text-gray-600 focus:border-[#87ceeb] outline-none transition-all w-full md:w-80"
+            className="bg-[#121212] border border-white/5 rounded pl-12 pr-6 py-3 text-white placeholder:text-gray-600 focus:border-[#87ceeb] outline-none transition-all w-full md:w-80"
            />
         </div>
       </div>
 
-      <div className="bg-[#121212] border border-white/5 rounded-3xl overflow-hidden">
+      <div className="bg-[#121212] border border-white/5 rounded overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left font-medium">
             <thead>

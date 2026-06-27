@@ -26,7 +26,7 @@ export default function AdminTransactions() {
         <p className="text-gray-400">Master record of all incoming STK pushes and status updates.</p>
       </div>
 
-      <div className="bg-[#121212] border border-white/5 rounded-3xl overflow-hidden">
+      <div className="bg-[#121212] border border-white/5 rounded overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left font-medium">
             <thead>

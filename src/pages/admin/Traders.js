@@ -159,12 +159,12 @@ export default function AdminTraders() {
             placeholder="Search traders..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="bg-[#121212] border border-white/5 rounded-xl pl-12 pr-6 py-3 text-white placeholder:text-gray-600 focus:border-[#87ceeb] outline-none transition-all w-full md:w-80"
+            className="bg-[#121212] border border-white/5 rounded pl-12 pr-6 py-3 text-white placeholder:text-gray-600 focus:border-[#87ceeb] outline-none transition-all w-full md:w-80"
            />
         </div>
       </div>
 
-      <div className="bg-[#121212] border border-white/5 rounded-3xl overflow-hidden">
+      <div className="bg-[#121212] border border-white/5 rounded overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left font-medium">
             <thead>
@@ -206,14 +206,14 @@ export default function AdminTraders() {
                     <div className="flex flex-wrap gap-2">
                        <button 
                         onClick={() => handleViewTraderDetails(t)}
-                        className="p-2 bg-white/5 text-gray-400 hover:text-[#87ceeb] hover:bg-white/10 rounded-lg transition-colors"
+                        className="p-2 bg-white/5 text-gray-400 hover:text-[#87ceeb] hover:bg-white/10 rounded transition-colors"
                         title="View details"
                        >
                          <Eye size={16} />
                        </button>
                        <button 
                         onClick={() => handleToggleStatus(t.id, t.status)}
-                        className={`p-2 rounded-lg transition-colors ${t.status === 'active' ? 'bg-red-500/10 text-red-500 hover:bg-red-500/20' : 'bg-green-500/10 text-green-500 hover:bg-green-500/20'}`}
+                        className={`p-2 rounded transition-colors ${t.status === 'active' ? 'bg-red-500/10 text-red-500 hover:bg-red-500/20' : 'bg-green-500/10 text-green-500 hover:bg-green-500/20'}`}
                         title={t.status === 'active' ? 'Suspend Account' : 'Reactivate Account'}
                        >
                          {t.status === 'active' ? <ShieldOff size={16} /> : <Shield size={16} />}
@@ -221,7 +221,7 @@ export default function AdminTraders() {
                        {t.role === 'trader' && (
                          <button
                            onClick={() => handlePromoteToMarketer(t)}
-                           className="p-2 bg-purple-600 text-white hover:bg-purple-700 rounded-lg transition-colors"
+                           className="p-2 bg-purple-600 text-white hover:bg-purple-700 rounded transition-colors"
                            title="Promote to marketer"
                          >
                            M
@@ -239,7 +239,7 @@ export default function AdminTraders() {
       {/* Trader Details Modal */}
       {selectedTrader && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#121212] border border-white/10 rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-[#121212] border border-white/10 rounded max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-8 space-y-6">
               {/* Header */}
               <div className="flex items-center justify-between border-b border-white/10 pb-6">
@@ -251,7 +251,7 @@ export default function AdminTraders() {
                   {isEditing && (
                     <button 
                       onClick={() => setIsEditing(false)}
-                      className="p-2 hover:bg-white/5 rounded-lg transition-colors"
+                      className="p-2 hover:bg-white/5 rounded transition-colors"
                       title="Cancel"
                     >
                       <X size={20} className="text-gray-400" />
@@ -260,7 +260,7 @@ export default function AdminTraders() {
                   {!isEditing && (
                     <button 
                       onClick={() => setIsEditing(true)}
-                      className="p-2 hover:bg-white/5 rounded-lg transition-colors"
+                      className="p-2 hover:bg-white/5 rounded transition-colors"
                       title="Edit"
                     >
                       <Edit2 size={20} className="text-[#87ceeb]" />
@@ -272,7 +272,7 @@ export default function AdminTraders() {
                       setTraderDetails(null);
                       setIsEditing(false);
                     }}
-                    className="p-2 hover:bg-white/5 rounded-lg transition-colors"
+                    className="p-2 hover:bg-white/5 rounded transition-colors"
                   >
                     <X size={24} className="text-gray-400" />
                   </button>
@@ -286,7 +286,7 @@ export default function AdminTraders() {
               ) : traderDetails ? (
                 <>
                   {/* Account Info */}
-                  <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3">
+                  <div className="bg-white/5 border border-white/10 rounded p-4 space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Email:</span>
                       {isEditing ? (
@@ -318,7 +318,7 @@ export default function AdminTraders() {
 
                   {/* Balance Info */}
                   <div className="space-y-3">
-                    <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                    <div className="bg-white/5 border border-white/10 rounded p-4">
                       <div className="flex justify-between items-center mb-2">
                         <label className="text-xs text-gray-500 uppercase tracking-widest">Trading Balance</label>
                         {isEditing && <span className="text-xs text-yellow-400">Editing</span>}
@@ -335,7 +335,7 @@ export default function AdminTraders() {
                       )}
                     </div>
 
-                    <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                    <div className="bg-white/5 border border-white/10 rounded p-4">
                       <div className="flex justify-between items-center mb-2">
                         <label className="text-xs text-gray-500 uppercase tracking-widest">Deposit Balance</label>
                         {isEditing && <span className="text-xs text-yellow-400">Editing</span>}
@@ -357,7 +357,7 @@ export default function AdminTraders() {
                   {isEditing && (
                     <button 
                       onClick={handleSaveChanges}
-                      className="w-full bg-[#87ceeb] text-[#0a0a0a] py-3 rounded-xl font-bold hover:bg-[#76b9d6] transition-all"
+                      className="w-full bg-[#87ceeb] text-[#0a0a0a] py-3 rounded font-bold hover:bg-[#76b9d6] transition-all"
                     >
                       Save Changes
                     </button>
@@ -367,7 +367,7 @@ export default function AdminTraders() {
                   {!isEditing && traderDetails.role === 'trader' && (
                     <button 
                       onClick={handlePromoteToMarketer}
-                      className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold hover:bg-purple-700 transition-all"
+                      className="w-full bg-purple-600 text-white py-3 rounded font-bold hover:bg-purple-700 transition-all"
                     >
                       Promote to Marketer
                     </button>

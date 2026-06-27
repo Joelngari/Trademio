@@ -199,18 +199,18 @@ export default function TraderHome() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-[#121212] p-6 rounded-3xl border border-white/5 overflow-hidden">
+        <div className="bg-[#121212] p-6 rounded border border-white/5 overflow-hidden">
           <p className="text-gray-400 text-sm font-medium mb-2">Trading Balance</p>
           <h3 className="text-4xl font-bold text-white">{formatCurrency(liveTradingBalance, currency, exchangeRates)}</h3>
           <p className="mt-2 text-xs text-green-400">Live estimate from active bot: +{formatCurrency(liveEstimatedProfit, currency, exchangeRates)}</p>
           <p className="mt-4 text-xs text-gray-500">This shows your current running profit estimate; final returns are credited when the session completes.</p>
         </div>
-        <div className="bg-[#121212] p-6 rounded-3xl border border-white/5 overflow-hidden">
+        <div className="bg-[#121212] p-6 rounded border border-white/5 overflow-hidden">
           <p className="text-gray-400 text-sm font-medium mb-2">Available Deposit</p>
           <h3 className="text-4xl font-bold text-white">{formatCurrency(depositBalance, currency, exchangeRates)}</h3>
           <p className="mt-4 text-xs text-gray-500">Funds available for new trades</p>
         </div>
-        <div className="bg-[#121212] p-6 rounded-3xl border border-white/5 overflow-hidden bg-gradient-to-br from-[#121212] to-[#87ceeb]/5">
+        <div className="bg-[#121212] p-6 rounded border border-white/5 overflow-hidden bg-gradient-to-br from-[#121212] to-[#87ceeb]/5">
           <p className="text-gray-400 text-sm font-medium mb-2">Portfolio Value</p>
           <h3 className="text-4xl font-bold text-white">{formatCurrency(totalPortfolio, currency, exchangeRates)}</h3>
           <p className="mt-4 text-xs text-gray-500">Includes open positions and account balances</p>
@@ -218,7 +218,7 @@ export default function TraderHome() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1.8fr_1fr] gap-6">
-        <div className="bg-[#121212] rounded-3xl border border-white/5 p-6">
+        <div className="bg-[#121212] rounded border border-white/5 p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
             <div>
               <h2 className="text-2xl font-bold text-white">Trade Ticket</h2>
@@ -227,13 +227,13 @@ export default function TraderHome() {
             <div className="flex gap-3">
               <button
                 onClick={() => setTradeForm((prev) => ({ ...prev, side: 'buy' }))}
-                className={`px-4 py-2 rounded-xl font-semibold transition ${tradeForm.side === 'buy' ? 'bg-green-500/15 border border-green-500 text-green-300' : 'bg-white/5 text-white hover:bg-white/10'}`}
+                className={`px-4 py-2 rounded font-semibold transition ${tradeForm.side === 'buy' ? 'bg-green-500/15 border border-green-500 text-green-300' : 'bg-white/5 text-white hover:bg-white/10'}`}
               >
                 Buy
               </button>
               <button
                 onClick={() => setTradeForm((prev) => ({ ...prev, side: 'sell' }))}
-                className={`px-4 py-2 rounded-xl font-semibold transition ${tradeForm.side === 'sell' ? 'bg-red-500/15 border border-red-500 text-red-300' : 'bg-white/5 text-white hover:bg-white/10'}`}
+                className={`px-4 py-2 rounded font-semibold transition ${tradeForm.side === 'sell' ? 'bg-red-500/15 border border-red-500 text-red-300' : 'bg-white/5 text-white hover:bg-white/10'}`}
               >
                 Sell
               </button>
@@ -247,7 +247,7 @@ export default function TraderHome() {
                 <select
                   value={tradeForm.symbol}
                   onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))}
-                  className="mt-2 w-full bg-[#0f0f0f] border border-white/10 rounded-2xl px-4 py-3 text-white"
+                  className="mt-2 w-full bg-[#0f0f0f] border border-white/10 rounded px-4 py-3 text-white"
                 >
                   {marketData.map((item) => (
                     <option key={item.symbol} value={item.symbol}>{item.displayName}</option>
@@ -261,28 +261,28 @@ export default function TraderHome() {
                   value={tradeForm.amount}
                   onChange={(e) => setTradeForm((prev) => ({ ...prev, amount: Number(e.target.value) }))}
                   disabled={tradeForm.side === 'sell'}
-                  className="mt-2 w-full bg-[#0f0f0f] border border-white/10 rounded-2xl px-4 py-3 text-white"
+                  className="mt-2 w-full bg-[#0f0f0f] border border-white/10 rounded px-4 py-3 text-white"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+              <div className="bg-white/5 border border-white/10 rounded p-4">
                 <p className="text-xs text-gray-500 uppercase tracking-widest">Market Price</p>
                 <p className="text-xl font-bold text-white">{selectedInstrument.price ? selectedInstrument.price : '---'}</p>
               </div>
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+              <div className="bg-white/5 border border-white/10 rounded p-4">
                 <p className="text-xs text-gray-500 uppercase tracking-widest">Spread</p>
                 <p className="text-xl font-bold text-white">{selectedInstrument.spread ?? '---'}</p>
               </div>
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+              <div className="bg-white/5 border border-white/10 rounded p-4">
                 <p className="text-xs text-gray-500 uppercase tracking-widest">Qty Estimate</p>
                 <p className="text-xl font-bold text-white">{tradeForm.side === 'buy' ? estimatedQuantity : 'Close all'}</p>
               </div>
             </div>
 
             {orderMessage && (
-              <div className={`rounded-2xl p-4 text-sm ${orderMessage.type === 'success' ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'}`}>
+              <div className={`rounded p-4 text-sm ${orderMessage.type === 'success' ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'}`}>
                 {orderMessage.text}
               </div>
             )}
@@ -296,7 +296,7 @@ export default function TraderHome() {
               <button
                 onClick={() => handleOrderSubmit(tradeForm.side)}
                 disabled={orderLoading || (tradeForm.side === 'buy' && (!tradeForm.amount || tradeForm.amount <= 0))}
-                className="inline-flex items-center justify-center gap-2 bg-[#87ceeb] text-[#0a0a0a] px-6 py-3 rounded-2xl font-bold hover:bg-[#76b9d6] transition-all disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 bg-[#87ceeb] text-[#0a0a0a] px-6 py-3 rounded font-bold hover:bg-[#76b9d6] transition-all disabled:opacity-50"
               >
                 {orderLoading ? 'Processing...' : tradeForm.side === 'buy' ? 'Place Buy Order' : 'Close Position'}
               </button>
@@ -305,14 +305,14 @@ export default function TraderHome() {
         </div>
 
         <div className="space-y-6">
-          <div className="bg-[#121212] rounded-3xl border border-white/5 p-6">
+          <div className="bg-[#121212] rounded border border-white/5 p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-white">Market Watchlist</h2>
               <span className="text-xs uppercase tracking-widest text-gray-500">Live quotes</span>
             </div>
             <div className="space-y-3">
               {marketData.slice(0, 5).map((item) => (
-                <div key={item.symbol} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10">
+                <div key={item.symbol} className="flex items-center justify-between p-4 rounded bg-white/5 border border-white/10">
                   <div>
                     <p className="text-sm text-gray-400">{item.displayName}</p>
                     <p className="text-white font-semibold">{item.symbol}</p>
@@ -326,12 +326,12 @@ export default function TraderHome() {
             </div>
           </div>
 
-          <div className="bg-[#121212] rounded-3xl border border-white/5 p-6">
+          <div className="bg-[#121212] rounded border border-white/5 p-6">
             <h2 className="text-xl font-bold text-white mb-4">Open Positions</h2>
             {openPositions.length > 0 ? (
               <div className="space-y-3">
                 {openPositions.map((position) => (
-                  <div key={`${position.symbol}-${position.accountType}`} className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                  <div key={`${position.symbol}-${position.accountType}`} className="p-4 rounded bg-white/5 border border-white/10">
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <p className="text-sm text-gray-400">{position.symbol}</p>
@@ -369,7 +369,7 @@ export default function TraderHome() {
       </div>
 
       {/* Main Chart */}
-      <div className="bg-[#121212] rounded-2xl border border-white/5 overflow-hidden">
+      <div className="bg-[#121212] rounded border border-white/5 overflow-hidden">
         <div className="p-4 border-b border-white/5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="font-bold text-white">Live Market Analysis</h3>
           <div className="flex flex-wrap items-center gap-2">
@@ -382,7 +382,7 @@ export default function TraderHome() {
             <select
               value={chartStyle}
               onChange={(e) => setChartStyle(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none"
+              className="bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white outline-none"
             >
               <option value="1">Bars</option>
               <option value="2">Candles</option>
@@ -396,7 +396,7 @@ export default function TraderHome() {
 
       {/* Bottom Widgets */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-[#121212] rounded-2xl border border-white/5 p-4 min-h-[360px] sm:min-h-[400px]">
+        <div className="bg-[#121212] rounded border border-white/5 p-4 min-h-[360px] sm:min-h-[400px]">
            <div className="flex items-center justify-between mb-4 gap-3">
              <h3 className="font-bold text-white">Market Overview</h3>
              <InstrumentSelectorButton
@@ -407,7 +407,7 @@ export default function TraderHome() {
            </div>
            <TradingViewMarketOverview />
         </div>
-        <div className="bg-[#121212] rounded-2xl border border-white/5 p-4 min-h-[360px] sm:min-h-[400px]">
+        <div className="bg-[#121212] rounded border border-white/5 p-4 min-h-[360px] sm:min-h-[400px]">
            <h3 className="font-bold text-white mb-4">Live News Feed</h3>
            <TradingViewNews />
         </div>
@@ -494,7 +494,7 @@ function InstrumentSelectorButton({ marketData = [], tradeForm, setTradeForm }) 
       <button
         type="button"
         onClick={() => setOpen((s) => !s)}
-        className="px-4 py-2 rounded-2xl bg-[#111827] border border-white/10 text-white text-sm font-semibold hover:bg-white/10 transition"
+        className="px-4 py-2 rounded bg-[#111827] border border-white/10 text-white text-sm font-semibold hover:bg-white/10 transition"
         aria-haspopup="true"
         aria-expanded={open}
       >
@@ -502,7 +502,7 @@ function InstrumentSelectorButton({ marketData = [], tradeForm, setTradeForm }) 
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-72 max-h-80 overflow-auto bg-[#0b0b0b] border border-white/10 rounded-2xl shadow-lg z-50">
+        <div className="absolute right-0 mt-2 w-72 max-h-80 overflow-auto bg-[#0b0b0b] border border-white/10 rounded shadow-lg z-50">
           {marketData.length === 0 ? (
             <div className="p-4 text-gray-400">No instruments available</div>
           ) : (

@@ -58,7 +58,7 @@ export default function MarketerPayouts() {
           <h1 className="text-3xl font-bold text-white mb-2">Marketer Payouts</h1>
           <p className="text-gray-400">View all marketer withdrawal requests and payout history.</p>
         </div>
-        <button onClick={fetchPayouts} className="bg-[#87ceeb] text-[#0a0a0a] px-6 py-3 rounded-xl font-bold hover:bg-[#76b9d6] flex items-center gap-2">
+        <button onClick={fetchPayouts} className="bg-[#87ceeb] text-[#0a0a0a] px-6 py-3 rounded font-bold hover:bg-[#76b9d6] flex items-center gap-2">
           <RefreshCw size={18} /> Refresh
         </button>
       </div>
@@ -68,7 +68,7 @@ export default function MarketerPayouts() {
           <button
             key={status}
             onClick={() => setStatusFilter(status)}
-            className={`px-4 py-2 rounded-xl font-semibold transition ${
+            className={`px-4 py-2 rounded font-semibold transition ${
               statusFilter === status
                 ? 'bg-[#87ceeb] text-[#0a0a0a]'
                 : 'bg-white/5 text-white hover:bg-white/10'
@@ -79,7 +79,7 @@ export default function MarketerPayouts() {
         ))}
       </div>
 
-      <div className="bg-[#121212] border border-white/5 rounded-3xl overflow-hidden">
+      <div className="bg-[#121212] border border-white/5 rounded overflow-hidden">
         {filteredPayouts.length === 0 ? (
           <div className="p-12 text-center text-gray-400">
             No payouts found for this filter.

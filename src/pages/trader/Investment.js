@@ -82,8 +82,8 @@ export default function Investment() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-[#121212] border border-white/5 rounded-3xl p-8 space-y-6">
-          <div className="w-16 h-16 bg-[#87ceeb]/10 rounded-2xl flex items-center justify-center text-[#87ceeb]">
+        <div className="bg-[#121212] border border-white/5 rounded p-8 space-y-6">
+          <div className="w-16 h-16 bg-[#87ceeb]/10 rounded flex items-center justify-center text-[#87ceeb]">
             <PieChart size={32} />
           </div>
 
@@ -102,7 +102,7 @@ export default function Investment() {
                   min="1000"
                   value={amount}
                   onChange={(e) => setAmount(Number(e.target.value))}
-                  className="w-full bg-black/40 border border-white/10 rounded-2xl pl-14 pr-4 py-4 text-xl text-white focus:border-[#87ceeb] outline-none transition-all"
+                  className="w-full bg-black/40 border border-white/10 rounded pl-14 pr-4 py-4 text-xl text-white focus:border-[#87ceeb] outline-none transition-all"
                 />
               </div>
             </div>
@@ -113,20 +113,20 @@ export default function Investment() {
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-4 text-white focus:border-[#87ceeb] outline-none"
+                className="w-full bg-black/40 border border-white/10 rounded px-4 py-4 text-white focus:border-[#87ceeb] outline-none"
                 placeholder="2547XXXXXXXX"
               />
             </div>
           </div>
 
           {message && (
-            <div className={`p-4 rounded-xl border ${message.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
+            <div className={`p-4 rounded border ${message.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
               {message.text}
             </div>
           )}
 
           {botPurchases.length > 0 && (
-            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-3xl p-6">
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-6">
               <div className="flex items-start gap-3 mb-4">
                 <AlertCircle className="text-yellow-500 mt-1" size={24} />
                 <div>
@@ -137,7 +137,7 @@ export default function Investment() {
               
               <div className="space-y-3">
                 {botPurchases.map((purchase) => (
-                  <div key={purchase.id} className="bg-black/30 border border-white/10 rounded-xl p-4">
+                  <div key={purchase.id} className="bg-black/30 border border-white/10 rounded p-4">
                     <p className="text-white font-semibold mb-2">{purchase.packageInfo?.name || 'Investment'}</p>
                     <p className="text-sm text-gray-400 mb-2">
                       {formatCurrency(purchase.amountPaid, profile?.preferredCurrency)} of {formatCurrency(purchase.requiredAmount, profile?.preferredCurrency)} invested
@@ -157,14 +157,14 @@ export default function Investment() {
           <button
             onClick={handleInvestment}
             disabled={activeSession || amount < 1000 || purchasing}
-            className={`w-full py-5 rounded-2xl font-bold text-xl transition-all flex items-center justify-center gap-2 ${activeSession ? 'bg-white/5 text-gray-500 cursor-not-allowed' : 'bg-[#87ceeb] text-[#0a0a0a] hover:bg-[#76b9d6]'}`}
+            className={`w-full py-5 rounded font-bold text-xl transition-all flex items-center justify-center gap-2 ${activeSession ? 'bg-white/5 text-gray-500 cursor-not-allowed' : 'bg-[#87ceeb] text-[#0a0a0a] hover:bg-[#76b9d6]'}`}
           >
             {purchasing ? <Loader2 className="animate-spin" /> : activeSession ? 'Investment in Progress' : 'Confirm Investment'}
           </button>
         </div>
 
         <div className="space-y-6">
-          <div className="bg-[#121212] border border-white/5 rounded-3xl p-8">
+          <div className="bg-[#121212] border border-white/5 rounded p-8">
             <h3 className="font-bold text-white mb-6">Return Forecast</h3>
             <div className="space-y-6">
               <div className="flex justify-between items-end">
@@ -185,7 +185,7 @@ export default function Investment() {
                 <p className="text-4xl font-bold text-[#87ceeb]">{formatCurrency(totalReturn, profile?.preferredCurrency)}</p>
               </div>
 
-              <div className="bg-blue-500/5 border border-blue-500/10 p-4 rounded-2xl flex gap-3">
+              <div className="bg-blue-500/5 border border-blue-500/10 p-4 rounded flex gap-3">
                 <Info size={18} className="text-[#87ceeb] shrink-0 mt-0.5" />
                 <p className="text-xs text-gray-400">
                   Your funds are locked in a secure algorithmic pool for 72 hours. Returns are automatically credited to your Trading Balance upon completion.
@@ -195,7 +195,7 @@ export default function Investment() {
           </div>
 
           {activeSession && (
-             <div className="bg-orange-500/10 border border-orange-500/20 p-6 rounded-3xl flex items-center gap-4">
+             <div className="bg-orange-500/10 border border-orange-500/20 p-6 rounded flex items-center gap-4">
                 <AlertCircle className="text-orange-500" />
                 <div>
                    <p className="text-orange-500 font-bold">Active Session Found</p>

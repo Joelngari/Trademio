@@ -155,7 +155,7 @@ export default function Trades() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="bg-[#121212] border border-white/5 rounded-3xl p-6">
+        <div className="bg-[#121212] border border-white/5 rounded p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-xl font-bold text-white">Open Positions</h2>
@@ -165,7 +165,7 @@ export default function Trades() {
           {positions.length > 0 ? (
             <div className="space-y-4">
               {positions.map((position) => (
-                <div key={`${position.symbol}-${position.accountType}`} className="bg-white/5 border border-white/10 rounded-3xl p-4">
+                <div key={`${position.symbol}-${position.accountType}`} className="bg-white/5 border border-white/10 rounded p-4">
                   <div className="flex items-center justify-between gap-4 mb-3">
                     <div>
                       <p className="text-sm text-gray-400">Real · {position.symbol}</p>
@@ -203,7 +203,7 @@ export default function Trades() {
           )}
         </div>
 
-        <div className="bg-[#121212] border border-white/5 rounded-3xl p-6">
+        <div className="bg-[#121212] border border-white/5 rounded p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-xl font-bold text-white">Trade History</h2>
@@ -214,7 +214,7 @@ export default function Trades() {
           {tradeHistory.length > 0 ? (
             <div className="space-y-4">
               {tradeHistory.slice(0, 10).map((trade) => (
-                <div key={trade.id} className="bg-white/5 border border-white/10 rounded-3xl p-4">
+                <div key={trade.id} className="bg-white/5 border border-white/10 rounded p-4">
                   <div className="flex items-center justify-between gap-4 mb-2">
                     <div>
                       <p className="text-sm text-gray-400">{trade.symbol} · {trade.side.toUpperCase()}</p>
@@ -246,7 +246,7 @@ export default function Trades() {
       </div>
 
       {!activeSession ? (
-        <div className="bg-[#121212] border border-white/5 rounded-3xl p-12 text-center space-y-6">
+        <div className="bg-[#121212] border border-white/5 rounded p-12 text-center space-y-6">
           <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto text-gray-500">
             <RefreshCw size={40} className="opacity-20" />
           </div>
@@ -255,7 +255,7 @@ export default function Trades() {
             <p className="text-gray-500 text-sm mb-8">You don't have any bots or investment plans running at the moment.</p>
             <Link 
               to="/trader/forex" 
-              className="inline-flex items-center gap-2 bg-[#87ceeb] text-[#0a0a0a] px-8 py-3 rounded-xl font-bold hover:bg-[#76b9d6] transition-all"
+              className="inline-flex items-center gap-2 bg-[#87ceeb] text-[#0a0a0a] px-8 py-3 rounded font-bold hover:bg-[#76b9d6] transition-all"
             >
               Browse Bots <ArrowRight size={18} />
             </Link>
@@ -263,7 +263,7 @@ export default function Trades() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-8">
-          <div className="bg-[#121212] border border-white/5 rounded-3xl p-8 md:p-12 relative overflow-hidden group">
+          <div className="bg-[#121212] border border-white/5 rounded p-8 md:p-12 relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
               <RefreshCw size={200} className="animate-spin-slow" />
             </div>
@@ -289,7 +289,7 @@ export default function Trades() {
                 </div>
               </div>
 
-              <div className="bg-white/5 border border-white/10 rounded-3xl p-8 text-center min-w-[240px] flex flex-col justify-center items-center">
+              <div className="bg-white/5 border border-white/10 rounded p-8 text-center min-w-[240px] flex flex-col justify-center items-center">
                 {activeSession.status === 'completed' ? (
                   <div className="flex flex-col items-center gap-4 py-4">
                     <CheckCircle2 size={64} className="text-green-500" />

@@ -37,7 +37,7 @@ export default function PaymentHistory() {
         <p className="text-gray-400">A detailed record of all your M-Pesa transactions.</p>
       </div>
 
-      <div className="bg-[#121212] border border-white/5 rounded-3xl overflow-hidden">
+      <div className="bg-[#121212] border border-white/5 rounded overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -63,7 +63,7 @@ export default function PaymentHistory() {
                   <tr key={t.id} className="hover:bg-white/[0.01] transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${t.status === 'success' ? 'bg-green-500/10 text-green-500' : t.status === 'pending' ? 'bg-orange-500/10 text-orange-500' : 'bg-red-500/10 text-red-500'}`}>
+                        <div className={`w-8 h-8 rounded flex items-center justify-center ${t.status === 'success' ? 'bg-green-500/10 text-green-500' : t.status === 'pending' ? 'bg-orange-500/10 text-orange-500' : 'bg-red-500/10 text-red-500'}`}>
                           {t.type === 'deposit' ? <ArrowUpRight size={14} /> : <ArrowDownLeft size={14} />}
                         </div>
                         <div>

@@ -135,15 +135,15 @@ export default function WithdrawalBot() {
       </div>
 
       {message && (
-        <div className={`p-4 rounded-xl border ${message.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
+        <div className={`p-4 rounded border ${message.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
           {message.text}
         </div>
       )}
 
       {trader?.withdrawalBotTier && (
-        <div className="bg-[#87ceeb]/10 border border-[#87ceeb]/20 p-6 rounded-3xl flex items-center justify-between">
+        <div className="bg-[#87ceeb]/10 border border-[#87ceeb]/20 p-6 rounded flex items-center justify-between">
            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-[#87ceeb]/20 rounded-2xl flex items-center justify-center text-[#87ceeb]">
+              <div className="w-12 h-12 bg-[#87ceeb]/20 rounded flex items-center justify-center text-[#87ceeb]">
                  <ShieldCheck size={28} />
               </div>
               <div>
@@ -162,7 +162,7 @@ export default function WithdrawalBot() {
 
       {/* Pending Purchases */}
       {botPurchases.length > 0 && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-3xl p-6">
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-6">
           <div className="flex items-start gap-3 mb-4">
             <Clock className="text-yellow-500 mt-1" size={24} />
             <div>
@@ -173,7 +173,7 @@ export default function WithdrawalBot() {
           
           <div className="space-y-3">
             {botPurchases.map((purchase) => (
-              <div key={purchase.id} className="bg-black/30 border border-white/10 rounded-xl p-4 flex items-center justify-between">
+              <div key={purchase.id} className="bg-black/30 border border-white/10 rounded p-4 flex items-center justify-between">
                 <div className="flex-1">
                   <p className="text-white font-semibold">{purchase.packageInfo?.name || 'Bot'}</p>
                   <p className="text-sm text-gray-400">
@@ -193,7 +193,7 @@ export default function WithdrawalBot() {
                     handlePurchase(purchase.packageInfo?.id, true, purchase.id);
                   }}
                   disabled={purchasing === purchase.packageInfo?.id}
-                  className="ml-4 px-4 py-2 bg-[#87ceeb] text-[#0a0a0a] rounded-lg font-semibold hover:bg-[#76b9d6] transition-all whitespace-nowrap disabled:opacity-50"
+                  className="ml-4 px-4 py-2 bg-[#87ceeb] text-[#0a0a0a] rounded font-semibold hover:bg-[#76b9d6] transition-all whitespace-nowrap disabled:opacity-50"
                 >
                   {purchasing === purchase.packageInfo?.id ? 'Processing...' : 'Complete Payment'}
                 </button>
@@ -209,7 +209,7 @@ export default function WithdrawalBot() {
           const amount = amountInputs[pkg.id] || pkg.price;
 
           return (
-            <div key={pkg.id} className={`bg-[#121212] border rounded-3xl p-8 flex flex-col relative overflow-hidden transition-all duration-300 ${isCurrent ? 'border-[#87ceeb] shadow-[0_0_20px_rgba(135,206,235,0.1)]' : 'border-white/5 hover:border-white/20'}`}>
+            <div key={pkg.id} className={`bg-[#121212] border rounded p-8 flex flex-col relative overflow-hidden transition-all duration-300 ${isCurrent ? 'border-[#87ceeb] shadow-[0_0_20px_rgba(135,206,235,0.1)]' : 'border-white/5 hover:border-white/20'}`}>
                {pkg.tier === 'premium' && (
                  <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none">
                     <Star size={80} />
@@ -242,11 +242,11 @@ export default function WithdrawalBot() {
                           value={phoneInputs[pkg.id] ?? ''}
                           onChange={(e) => setPhoneInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
                           placeholder="M-Pesa Number"
-                          className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:border-[#87ceeb] outline-none"
+                          className="w-full bg-black/40 border border-white/10 rounded px-4 py-2 text-sm text-white focus:border-[#87ceeb] outline-none"
                          />
                          {/* Resume banner: if there's an existing pending purchase for this package, show prompt */}
                          {botPurchases.some(bp => bp.packageInfo?.id === pkg.id) && (
-                           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-sm text-yellow-200">
+                           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded p-3 text-sm text-yellow-200">
                              You have a pending purchase for this plan. Resume it from the Pending Purchases panel above to avoid creating duplicates.
                            </div>
                          )}
@@ -258,7 +258,7 @@ export default function WithdrawalBot() {
                         onChange={(e) => setAmountInputs((prev) => ({ ...prev, [pkg.id]: parseFloat(e.target.value) || 0 }))}
                         min="1"
                         max={pkg.price}
-                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:border-[#87ceeb] outline-none"
+                        className="w-full bg-black/40 border border-white/10 rounded px-4 py-2 text-sm text-white focus:border-[#87ceeb] outline-none"
                        />
                        <p className="text-xs text-gray-500 mt-1">1 - {formatCurrency(pkg.price, profile?.preferredCurrency)}</p>
                      </div>
@@ -267,7 +267,7 @@ export default function WithdrawalBot() {
                  <button
                    disabled={isCurrent || purchasing === pkg.id}
                    onClick={() => handlePurchase(pkg.id)}
-                   className={`w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${isCurrent ? 'bg-green-500/10 text-green-500 cursor-not-allowed' : 'bg-[#121212] text-[#87ceeb] border border-[#87ceeb] hover:bg-[#87ceeb] hover:text-[#0a0a0a]'}`}
+                   className={`w-full py-4 rounded font-bold transition-all flex items-center justify-center gap-2 ${isCurrent ? 'bg-green-500/10 text-green-500 cursor-not-allowed' : 'bg-[#121212] text-[#87ceeb] border border-[#87ceeb] hover:bg-[#87ceeb] hover:text-[#0a0a0a]'}`}
                  >
                    {purchasing === pkg.id ? <Loader2 className="animate-spin" /> : isCurrent ? 'Active Tier' : 'Pay Now'}
                  </button>

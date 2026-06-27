@@ -41,7 +41,7 @@ export default function ActiveSessions() {
         <p className="text-gray-400">Live monitoring of all currently running platform activations.</p>
       </div>
 
-      <div className="bg-[#121212] border border-white/5 rounded-3xl overflow-hidden">
+      <div className="bg-[#121212] border border-white/5 rounded overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left font-medium">
             <thead>
@@ -75,7 +75,7 @@ export default function ActiveSessions() {
                     <td className="px-6 py-4">
                        <button 
                         onClick={() => handleManualComplete(s)}
-                        className="bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-lg transition-colors border border-white/10 text-xs font-bold"
+                        className="bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded transition-colors border border-white/10 text-xs font-bold"
                        >
                          Force Complete
                        </button>

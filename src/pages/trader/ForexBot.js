@@ -155,7 +155,7 @@ export default function ForexBot() {
           <p className="text-gray-400">High-performance algorithms for global currency pairs.</p>
         </div>
         {activeSession && (
-          <div className="bg-orange-500/10 border border-orange-500/20 text-orange-500 px-4 py-2 rounded-xl flex items-center gap-2 text-sm">
+          <div className="bg-orange-500/10 border border-orange-500/20 text-orange-500 px-4 py-2 rounded flex items-center gap-2 text-sm">
             <AlertCircle size={16} />
             You have an active session running.
           </div>
@@ -163,13 +163,13 @@ export default function ForexBot() {
       </div>
 
       {message && (
-        <div className={`p-4 rounded-xl border ${message.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
+        <div className={`p-4 rounded border ${message.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
           {message.text}
         </div>
       )}
 
       {botPurchases.length > 0 && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-3xl p-6">
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-6">
           <div className="flex items-start gap-3 mb-4">
             <AlertCircle className="text-yellow-500 mt-1" size={24} />
             <div>
@@ -180,7 +180,7 @@ export default function ForexBot() {
           
           <div className="space-y-3">
             {botPurchases.map((purchase) => (
-              <div key={purchase.id} className="bg-black/30 border border-white/10 rounded-xl p-4 flex items-center justify-between">
+              <div key={purchase.id} className="bg-black/30 border border-white/10 rounded p-4 flex items-center justify-between">
                 <div className="flex-1">
                   <p className="text-white font-semibold">{purchase.packageInfo?.name || 'Bot'}</p>
                   <p className="text-sm text-gray-400">
@@ -200,7 +200,7 @@ export default function ForexBot() {
                     handlePurchase(purchase.packageInfo?.id, true, purchase.id);
                   }}
                   disabled={purchasing === purchase.packageInfo?.id}
-                  className="ml-4 px-4 py-2 bg-cyan-500 text-white rounded-lg font-semibold hover:bg-cyan-600 transition-all whitespace-nowrap disabled:opacity-50"
+                  className="ml-4 px-4 py-2 bg-cyan-500 text-white rounded font-semibold hover:bg-cyan-600 transition-all whitespace-nowrap disabled:opacity-50"
                 >
                   {purchasing === purchase.packageInfo?.id ? 'Processing...' : 'Complete Payment'}
                 </button>
@@ -211,7 +211,7 @@ export default function ForexBot() {
       )}
 
       {activeSession && (
-        <div className="rounded-3xl border border-[#87ceeb]/20 bg-[#87ceeb]/10 p-6 space-y-3">
+        <div className="rounded border border-[#87ceeb]/20 bg-[#87ceeb]/10 p-6 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.25em] text-[#87ceeb]">Active Session</p>
@@ -219,9 +219,9 @@ export default function ForexBot() {
               <p className="text-sm text-gray-300">Expected return: {formatCurrency(activeSession.expectedReturn || 0, profile?.preferredCurrency)} · {timeLeft || 'Live session active'}</p>
             </div>
             {activeSession.status === 'stopped' ? (
-              <button onClick={handleResumeSession} className="inline-flex items-center gap-2 rounded-xl border border-green-400/30 bg-green-500/10 px-4 py-2 text-sm font-semibold text-green-200 hover:bg-green-500/20"><Play size={16}/> Resume Session</button>
+              <button onClick={handleResumeSession} className="inline-flex items-center gap-2 rounded border border-green-400/30 bg-green-500/10 px-4 py-2 text-sm font-semibold text-green-200 hover:bg-green-500/20"><Play size={16}/> Resume Session</button>
             ) : (
-              <button onClick={handleStopSession} className="inline-flex items-center gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/20"><StopCircle size={16}/> Stop Bot</button>
+              <button onClick={handleStopSession} className="inline-flex items-center gap-2 rounded border border-red-400/30 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/20"><StopCircle size={16}/> Stop Bot</button>
             )}
           </div>
         </div>
@@ -229,10 +229,10 @@ export default function ForexBot() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {packages.map((pkg) => (
-          <div key={pkg.id} className="bg-[#121212] border border-white/5 rounded-3xl p-8 flex flex-col relative overflow-hidden group">
+          <div key={pkg.id} className="bg-[#121212] border border-white/5 rounded p-8 flex flex-col relative overflow-hidden group">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#87ceeb]/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             
-            <div className="w-12 h-12 bg-[#87ceeb]/10 rounded-2xl flex items-center justify-center text-[#87ceeb] mb-6">
+            <div className="w-12 h-12 bg-[#87ceeb]/10 rounded flex items-center justify-center text-[#87ceeb] mb-6">
               <Cpu size={24} />
             </div>
 
@@ -264,19 +264,19 @@ export default function ForexBot() {
                 value={amountInputs[pkg.id] ?? pkg.price}
                 onChange={(e) => setAmountInputs((prev) => ({ ...prev, [pkg.id]: Number(e.target.value) }))}
                 placeholder={`Amount (max ${formatCurrency(pkg.price, profile?.preferredCurrency)})`}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-[#87ceeb] outline-none"
+                className="w-full bg-black/40 border border-white/10 rounded px-4 py-3 text-sm text-white focus:border-[#87ceeb] outline-none"
               />
               <input 
                 type="text" 
                 value={phoneInputs[pkg.id] ?? ''}
                 onChange={(e) => setPhoneInputs((prev) => ({ ...prev, [pkg.id]: e.target.value }))}
                 placeholder="2547XXXXXXXX"
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:border-[#87ceeb] outline-none"
+                className="w-full bg-black/40 border border-white/10 rounded px-4 py-2 text-sm text-white focus:border-[#87ceeb] outline-none"
               />
               <button
                 disabled={(activeSession && activeSession.status !== 'stopped') || purchasing === pkg.id || botPurchases.some(bp => bp.packageInfo?.id === pkg.id)}
                 onClick={() => handlePurchase(pkg.id)}
-                className={`w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${activeSession ? 'bg-white/5 text-gray-500 cursor-not-allowed' : 'bg-[#87ceeb] text-[#0a0a0a] hover:bg-[#76b9d6]'}`}
+                className={`w-full py-4 rounded font-bold transition-all flex items-center justify-center gap-2 ${activeSession ? 'bg-white/5 text-gray-500 cursor-not-allowed' : 'bg-[#87ceeb] text-[#0a0a0a] hover:bg-[#76b9d6]'}`}
               >
                 {botPurchases.some(bp => bp.packageInfo?.id === pkg.id) ? 'Pending Purchase Exists' : (purchasing === pkg.id ? <Loader2 className="animate-spin" /> : activeSession ? 'Session Running' : 'Activate Bot')}
               </button>

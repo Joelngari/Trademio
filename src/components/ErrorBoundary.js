@@ -50,7 +50,7 @@ export default class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center p-6">
-          <div className="max-w-xl text-center bg-[#0f0f0f] border border-white/5 rounded-2xl p-8">
+          <div className="max-w-xl text-center bg-[#0f0f0f] border border-white/5 rounded p-8">
             <h2 className="text-2xl font-bold text-white mb-2">Something went wrong</h2>
             <p className="text-gray-400 mb-6">We're sorry — an unexpected error occurred. You can try to recover below. The app will also attempt to recover automatically.</p>
             <details className="text-xs text-gray-500 text-left overflow-auto max-h-40 mb-6">
@@ -60,13 +60,13 @@ export default class ErrorBoundary extends React.Component {
             <div className="flex gap-3 justify-center items-center">
               <button
                 onClick={this.handleRetry}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium"
               >
                 Retry
               </button>
               <button
                 onClick={this.handleGoHome}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium"
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded font-medium"
               >
                 Go Home
               </button>

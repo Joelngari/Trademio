@@ -39,9 +39,9 @@ export default function AdminHome() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="bg-[#121212] p-8 rounded-3xl border border-white/5 space-y-4">
+        <div className="bg-[#121212] p-8 rounded border border-white/5 space-y-4">
            <div className="flex justify-between items-start">
-             <div className="w-12 h-12 bg-[#87ceeb]/10 rounded-2xl flex items-center justify-center text-[#87ceeb]">
+             <div className="w-12 h-12 bg-[#87ceeb]/10 rounded flex items-center justify-center text-[#87ceeb]">
                 <TrendingUp size={24} />
              </div>
              <span className="text-[10px] text-[#87ceeb] font-bold bg-[#87ceeb]/5 px-3 py-1 rounded-full uppercase tracking-widest">Revenue</span>
@@ -52,9 +52,9 @@ export default function AdminHome() {
            </div>
         </div>
 
-        <div className="bg-[#121212] p-8 rounded-3xl border border-white/5 space-y-4">
+        <div className="bg-[#121212] p-8 rounded border border-white/5 space-y-4">
            <div className="flex justify-between items-start">
-             <div className="w-12 h-12 bg-green-500/10 rounded-2xl flex items-center justify-center text-green-500">
+             <div className="w-12 h-12 bg-green-500/10 rounded flex items-center justify-center text-green-500">
                 <ShieldCheck size={24} />
              </div>
              <span className="text-[10px] text-green-500 font-bold bg-green-500/5 px-3 py-1 rounded-full uppercase tracking-widest">Admin Profit</span>
@@ -65,9 +65,9 @@ export default function AdminHome() {
            </div>
         </div>
 
-        <div className="bg-[#121212] p-8 rounded-3xl border border-white/5 space-y-4">
+        <div className="bg-[#121212] p-8 rounded border border-white/5 space-y-4">
            <div className="flex justify-between items-start">
-             <div className="w-12 h-12 bg-purple-500/10 rounded-2xl flex items-center justify-center text-purple-500">
+             <div className="w-12 h-12 bg-purple-500/10 rounded flex items-center justify-center text-purple-500">
                 <Activity size={24} />
              </div>
              <span className="text-[10px] text-purple-500 font-bold bg-purple-500/5 px-3 py-1 rounded-full uppercase tracking-widest">Sessions</span>
@@ -80,9 +80,9 @@ export default function AdminHome() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-orange-500/5 border border-orange-500/20 p-6 rounded-3xl flex items-center justify-between">
+        <div className="bg-orange-500/5 border border-orange-500/20 p-6 rounded flex items-center justify-between">
            <div className="flex items-center gap-4">
-             <div className="w-12 h-12 bg-orange-500/10 rounded-2xl flex items-center justify-center text-orange-500">
+             <div className="w-12 h-12 bg-orange-500/10 rounded flex items-center justify-center text-orange-500">
                 <Clock size={24} />
              </div>
              <div>
@@ -93,9 +93,9 @@ export default function AdminHome() {
            <ArrowUpRight className="text-orange-500/40" />
         </div>
 
-        <div className="bg-blue-500/5 border border-blue-500/20 p-6 rounded-3xl flex items-center justify-between">
+        <div className="bg-blue-500/5 border border-blue-500/20 p-6 rounded flex items-center justify-between">
            <div className="flex items-center gap-4">
-             <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center text-blue-500">
+             <div className="w-12 h-12 bg-blue-500/10 rounded flex items-center justify-center text-blue-500">
                 <Users size={24} />
              </div>
              <div>
@@ -108,7 +108,7 @@ export default function AdminHome() {
       </div>
 
       {/* Recent Transactions */}
-      <div className="bg-[#121212] border border-white/5 rounded-3xl overflow-hidden">
+      <div className="bg-[#121212] border border-white/5 rounded overflow-hidden">
         <div className="p-6 border-b border-white/5 flex items-center justify-between">
            <h3 className="font-bold text-white">Recent Transactions</h3>
            <FileText size={18} className="text-gray-600" />

@@ -37,7 +37,7 @@ export function ErrorProvider({ children }) {
       {children}
       {error && (
         <div className="fixed bottom-6 right-6 z-50 max-w-lg">
-          <div className="bg-red-600 text-white rounded-xl shadow-lg p-4">
+          <div className="bg-red-600 text-white rounded shadow-lg p-4">
             <div className="flex items-start gap-3">
               <div className="flex-1">
                 <div className="font-bold">Error</div>

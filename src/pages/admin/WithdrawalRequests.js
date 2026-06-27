@@ -75,19 +75,19 @@ export default function WithdrawalRequests() {
         <p className="text-gray-400">Review and process trader fund withdrawals.</p>
       </div>
 
-      <div className="flex gap-2 p-1 bg-white/5 rounded-xl w-max flex-wrap">
+      <div className="flex gap-2 p-1 bg-white/5 rounded w-max flex-wrap">
         {['pending', 'ready_for_processing_by_platform', 'pending_processing_by_platform', 'in_processing', 'paid', 'rejected', 'all'].map((t) => (
           <button
             key={t}
             onClick={() => {setTab(t); setLoading(true);}}
-            className={`px-6 py-2 rounded-lg text-xs font-bold uppercase transition-all ${tab === t ? 'bg-[#87ceeb] text-[#0a0a0a]' : 'text-gray-500 hover:text-gray-300'}`}
+            className={`px-6 py-2 rounded text-xs font-bold uppercase transition-all ${tab === t ? 'bg-[#87ceeb] text-[#0a0a0a]' : 'text-gray-500 hover:text-gray-300'}`}
           >
             {t}
           </button>
         ))}
       </div>
 
-      <div className="bg-[#121212] border border-white/5 rounded-3xl overflow-hidden">
+      <div className="bg-[#121212] border border-white/5 rounded overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left font-medium">
             <thead>
@@ -134,14 +134,14 @@ export default function WithdrawalRequests() {
                           <>
                             <button 
                               onClick={() => handleAdvance(r)}
-                              className="p-2 bg-green-500/10 text-green-500 hover:bg-green-500/20 rounded-lg border border-green-500/20"
+                              className="p-2 bg-green-500/10 text-green-500 hover:bg-green-500/20 rounded border border-green-500/20"
                               title="Advance to next stage"
                             >
                               <Check size={16} />
                             </button>
                             <button 
                               onClick={() => handleExtend(r)}
-                              className="p-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 rounded-lg border border-blue-500/20"
+                              className="p-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 rounded border border-blue-500/20"
                               title="Extend review window"
                             >
                               <RefreshCcw size={16} />
@@ -151,7 +151,7 @@ export default function WithdrawalRequests() {
                         {r.status !== 'paid' && r.status !== 'rejected' && (
                           <button 
                             onClick={() => handleReject(r)}
-                            className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-lg border border-red-500/20"
+                            className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded border border-red-500/20"
                             title="Reject request"
                           >
                             <X size={16} />

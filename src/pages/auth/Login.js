@@ -38,7 +38,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-[#121212] border border-white/5 rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+      <div className="w-full max-w-md bg-[#121212] border border-white/5 rounded p-8 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-1 bg-[#87ceeb]/20" />
         
         <div className="text-center mb-8">
@@ -52,7 +52,7 @@ export default function Login() {
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-sm p-4 rounded-xl mb-6">
+          <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-sm p-4 rounded mb-6">
             {error}
           </div>
         )}
@@ -65,7 +65,7 @@ export default function Login() {
               name="email"
               required
               value={formData.email}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#87ceeb] focus:ring-1 focus:ring-[#87ceeb] transition-all outline-none"
+              className="w-full bg-white/5 border border-white/10 rounded px-4 py-3 text-white focus:border-[#87ceeb] focus:ring-1 focus:ring-[#87ceeb] transition-all outline-none"
               placeholder="john@example.com"
               onChange={handleChange}
             />
@@ -79,7 +79,7 @@ export default function Login() {
                 name="password"
                 required
                 value={formData.password}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 pr-10 text-white focus:border-[#87ceeb] focus:ring-1 focus:ring-[#87ceeb] transition-all outline-none"
+                className="w-full bg-white/5 border border-white/10 rounded px-4 py-3 pr-10 text-white focus:border-[#87ceeb] focus:ring-1 focus:ring-[#87ceeb] transition-all outline-none"
                 placeholder="••••••••"
                 onChange={handleChange}
               />
@@ -116,7 +116,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#87ceeb] text-[#0a0a0a] font-bold py-4 rounded-xl hover:bg-[#76b9d6] transition-all flex items-center justify-center gap-2 mt-2"
+            className="w-full bg-[#87ceeb] text-[#0a0a0a] font-bold py-4 rounded hover:bg-[#76b9d6] transition-all flex items-center justify-center gap-2 mt-2"
           >
             {loading ? <Loader2 className="animate-spin" /> : 'Login to Dashboard'}
           </button>

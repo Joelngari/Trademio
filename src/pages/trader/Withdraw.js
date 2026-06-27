@@ -99,8 +99,8 @@ export default function Withdraw() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <form onSubmit={handleWithdraw} className="bg-[#121212] border border-white/5 rounded-3xl p-8 space-y-6">
-          <div className="w-16 h-16 bg-[#87ceeb]/10 rounded-2xl flex items-center justify-center text-[#87ceeb]">
+        <form onSubmit={handleWithdraw} className="bg-[#121212] border border-white/5 rounded p-8 space-y-6">
+          <div className="w-16 h-16 bg-[#87ceeb]/10 rounded flex items-center justify-center text-[#87ceeb]">
             <ArrowDownCircle size={32} />
           </div>
 
@@ -114,7 +114,7 @@ export default function Withdraw() {
                   min="10"
                   value={amount}
                   onChange={(e) => setAmount(Number(e.target.value))}
-                  className="w-full bg-black/40 border border-white/10 rounded-2xl pl-14 pr-4 py-4 text-xl text-white focus:border-[#87ceeb] outline-none transition-all"
+                  className="w-full bg-black/40 border border-white/10 rounded pl-14 pr-4 py-4 text-xl text-white focus:border-[#87ceeb] outline-none transition-all"
                 />
               </div>
             </div>
@@ -125,14 +125,14 @@ export default function Withdraw() {
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-4 text-white focus:border-[#87ceeb] outline-none"
+                className="w-full bg-black/40 border border-white/10 rounded px-4 py-4 text-white focus:border-[#87ceeb] outline-none"
                 placeholder="2547XXXXXXXX"
               />
             </div>
           </div>
 
           {message && (
-            <div className={`p-4 rounded-xl border ${message.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
+            <div className={`p-4 rounded border ${message.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
               {message.text}
             </div>
           )}
@@ -140,14 +140,14 @@ export default function Withdraw() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full bg-[#87ceeb] text-[#0a0a0a] font-bold py-5 rounded-2xl text-xl hover:bg-[#76b9d6] transition-all flex items-center justify-center gap-2"
+            className="w-full bg-[#87ceeb] text-[#0a0a0a] font-bold py-5 rounded text-xl hover:bg-[#76b9d6] transition-all flex items-center justify-center gap-2"
           >
             {submitting ? <Loader2 className="animate-spin" /> : 'Request Withdrawal'}
           </button>
         </form>
 
         <div className="space-y-6">
-          <div className="bg-[#121212] border border-white/5 rounded-3xl p-8">
+          <div className="bg-[#121212] border border-white/5 rounded p-8">
              <div className="flex items-center justify-between mb-8">
                 <h3 className="font-bold text-white">Wallet Overview</h3>
                 <span className="bg-[#87ceeb]/10 text-[#87ceeb] text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest">
@@ -164,9 +164,9 @@ export default function Withdraw() {
                 <div className="h-px bg-white/5" />
 
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10">
+                  <div className="flex items-center justify-between p-4 bg-white/5 rounded border border-white/10">
                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-[#87ceeb]/10 rounded-xl flex items-center justify-center text-[#87ceeb]">
+                        <div className="w-10 h-10 bg-[#87ceeb]/10 rounded flex items-center justify-center text-[#87ceeb]">
                            <ShieldCheck size={20} />
                         </div>
                         <div>
@@ -182,7 +182,7 @@ export default function Withdraw() {
                      </div>
                   </div>
 
-                  <div className="bg-orange-500/5 border border-orange-500/10 p-4 rounded-2xl flex gap-3 text-orange-500">
+                  <div className="bg-orange-500/5 border border-orange-500/10 p-4 rounded flex gap-3 text-orange-500">
                     <AlertCircle size={18} className="shrink-0 mt-0.5" />
                     <p className="text-[11px] font-medium">
                       All trader withdrawals are processed within 2-24 hours after admin verification.
@@ -192,14 +192,14 @@ export default function Withdraw() {
              </div>
           </div>
 
-          <div className="bg-[#121212] border border-white/5 rounded-3xl p-8">
+          <div className="bg-[#121212] border border-white/5 rounded p-8">
             <h3 className="font-bold text-white mb-4">Recent Withdrawal Requests</h3>
             {withdrawals.length === 0 ? (
               <p className="text-sm text-gray-500">No withdrawals yet.</p>
             ) : (
               <div className="space-y-3">
                 {withdrawals.slice(0, 3).map((item) => (
-                  <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div key={item.id} className="rounded border border-white/10 bg-black/20 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-white">KSh {Number(item.amount || 0).toLocaleString()}</p>
@@ -218,7 +218,7 @@ export default function Withdraw() {
             )}
           </div>
 
-          <div className="bg-[#121212] border border-white/5 rounded-3xl p-8">
+          <div className="bg-[#121212] border border-white/5 rounded p-8">
             <h3 className="font-bold text-white mb-4">Security Rules</h3>
             <ul className="space-y-3">
               {[

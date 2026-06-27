@@ -65,8 +65,8 @@ export default function MarketerWithdraw() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <form onSubmit={handleWithdraw} className="bg-[#121212] border border-white/5 rounded-3xl p-8 space-y-6">
-          <div className="w-16 h-16 bg-[#87ceeb]/10 rounded-2xl flex items-center justify-center text-[#87ceeb]">
+        <form onSubmit={handleWithdraw} className="bg-[#121212] border border-white/5 rounded p-8 space-y-6">
+          <div className="w-16 h-16 bg-[#87ceeb]/10 rounded flex items-center justify-center text-[#87ceeb]">
             <ArrowDownCircle size={32} />
           </div>
 
@@ -80,7 +80,7 @@ export default function MarketerWithdraw() {
                   min={minWithdrawal}
                   value={amount}
                   onChange={(e) => setAmount(Number(e.target.value))}
-                  className="w-full bg-black/40 border border-white/10 rounded-2xl pl-14 pr-4 py-4 text-xl text-white focus:border-[#87ceeb] outline-none transition-all"
+                  className="w-full bg-black/40 border border-white/10 rounded pl-14 pr-4 py-4 text-xl text-white focus:border-[#87ceeb] outline-none transition-all"
                 />
               </div>
             </div>
@@ -91,14 +91,14 @@ export default function MarketerWithdraw() {
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-4 text-white focus:border-[#87ceeb] outline-none"
+                className="w-full bg-black/40 border border-white/10 rounded px-4 py-4 text-white focus:border-[#87ceeb] outline-none"
                 placeholder="2547XXXXXXXX"
               />
             </div>
           </div>
 
           {message && (
-            <div className={`p-4 rounded-xl border ${message.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
+            <div className={`p-4 rounded border ${message.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
               {message.text}
             </div>
           )}
@@ -106,14 +106,14 @@ export default function MarketerWithdraw() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full bg-[#87ceeb] text-[#0a0a0a] font-bold py-5 rounded-2xl text-xl hover:bg-[#76b9d6] transition-all flex items-center justify-center gap-2"
+            className="w-full bg-[#87ceeb] text-[#0a0a0a] font-bold py-5 rounded text-xl hover:bg-[#76b9d6] transition-all flex items-center justify-center gap-2"
           >
             {submitting ? <Loader2 className="animate-spin" /> : 'Instant M-Pesa Payout'}
           </button>
         </form>
 
         <div className="space-y-6">
-          <div className="bg-[#121212] border border-white/5 rounded-3xl p-8">
+          <div className="bg-[#121212] border border-white/5 rounded p-8">
              <div className="flex items-center justify-between mb-8">
                 <h3 className="font-bold text-white">Earnings Overview</h3>
                 <div className="flex items-center gap-2 text-xs text-green-500">
@@ -131,14 +131,14 @@ export default function MarketerWithdraw() {
                 <div className="h-px bg-white/5" />
 
                 <div className="space-y-4">
-                  <div className="bg-[#87ceeb]/5 border border-[#87ceeb]/10 p-6 rounded-2xl flex gap-4">
+                  <div className="bg-[#87ceeb]/5 border border-[#87ceeb]/10 p-6 rounded flex gap-4">
                      <Info size={20} className="text-[#87ceeb] shrink-0 mt-0.5" />
                      <p className="text-xs text-gray-400 leading-relaxed">
                         Marketer payouts are processed automatically. Funds should arrive in your mobile wallet within minutes after submission.
                      </p>
                   </div>
 
-                  <div className="bg-orange-500/5 border border-orange-500/10 p-4 rounded-2xl flex gap-3 text-orange-500">
+                  <div className="bg-orange-500/5 border border-orange-500/10 p-4 rounded flex gap-3 text-orange-500">
                     <AlertCircle size={18} className="shrink-0 mt-0.5" />
                     <p className="text-[11px] font-medium leading-[1.4]">
                       Ensure you are withdrawing to an M-Pesa registered number. 

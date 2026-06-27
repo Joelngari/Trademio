@@ -38,13 +38,13 @@ export default function EarningsHistory() {
           <h1 className="text-3xl font-bold text-white mb-2">Earnings History</h1>
           <p className="text-gray-400">Total returns credited from your successful trading sessions.</p>
         </div>
-        <div className="bg-[#87ceeb]/10 border border-[#87ceeb]/20 p-6 rounded-3xl min-w-[240px]">
+        <div className="bg-[#87ceeb]/10 border border-[#87ceeb]/20 p-6 rounded min-w-[240px]">
            <p className="text-[10px] text-[#87ceeb] uppercase font-bold tracking-widest mb-1">Lifetime Earnings</p>
            <h2 className="text-3xl font-bold text-white">{formatCurrency(totalEarned, currency)}</h2>
         </div>
       </div>
 
-      <div className="bg-[#121212] border border-white/5 rounded-3xl overflow-hidden">
+      <div className="bg-[#121212] border border-white/5 rounded overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -67,7 +67,7 @@ export default function EarningsHistory() {
                   <tr key={e.id} className="hover:bg-white/[0.01] transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-[#87ceeb]/10 flex items-center justify-center text-[#87ceeb]">
+                        <div className="w-8 h-8 rounded bg-[#87ceeb]/10 flex items-center justify-center text-[#87ceeb]">
                            <TrendingUp size={14} />
                         </div>
                         <span className="text-sm font-bold text-white uppercase tracking-tight">{e.planName}</span>
