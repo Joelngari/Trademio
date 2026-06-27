@@ -1005,8 +1005,10 @@ async function getTraderDashboardData(uid) {
     if (sessDoc.exists) activeSession = sessDoc.data();
   }
 
-  const ordersSnapshot = await adminDb.collection('tradeOrders').where('traderId', '==', uid).orderBy('createdAt', 'desc').get();
-  const orders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const ordersSnapshot = await adminDb.collection('tradeOrders').where('traderId', '==', uid).get();
+  const orders = ordersSnapshot.docs
+    .map(doc => ({ id: doc.id, ...doc.data() }))
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const livePrices = await getLivePriceSnapshot();
   const marketData = await getMarketInstruments(livePrices);
   const positions = await aggregatePositions(orders, livePrices);
@@ -1745,16 +1747,18 @@ app.get('/api/admin/bot-purchases', authMiddleware, roleMiddleware(['admin']), a
 app.get('/api/trader/bot-purchases', authMiddleware, async (req, res) => {
   try {
     const traderId = req.user.uid;
+    // Query by traderId only, then sort and filter status in memory to avoid composite index requirement
     const snapshot = await adminDb.collection('botPurchases')
       .where('traderId', '==', traderId)
-      .where('status', '==', 'pending')
-      .orderBy('createdAt', 'desc')
       .get();
     
     const botPurchases = [];
+    const allPurchases = snapshot.docs.map(doc => doc.data()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     
-    for (const doc of snapshot.docs) {
-      const data = doc.data();
+    for (const data of allPurchases) {
+      // Filter for pending status in application code
+      if (data.status !== 'pending') continue;
+      
       const pkgSnap = await adminDb.collection('packages').doc(data.packageId).get();
       
       botPurchases.push({
