@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext.js';
 import { traderApi } from '../../services/api.js';
 import { formatCurrency } from '../../lib/currency.js';
@@ -33,6 +34,8 @@ export default function Withdraw() {
     };
     fetchData();
   }, []);
+
+  const navigate = useNavigate();
 
   const handleWithdraw = async (e) => {
     e.preventDefault();
@@ -143,6 +146,14 @@ export default function Withdraw() {
             className="w-full bg-[#87ceeb] text-[#0a0a0a] font-bold py-5 rounded text-xl hover:bg-[#76b9d6] transition-all flex items-center justify-center gap-2"
           >
             {submitting ? <Loader2 className="animate-spin" /> : 'Request Withdrawal'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/trader/withdrawal-bot', { state: { requestedWithdrawal: amount, phoneNumber: phone } })}
+            className="w-full mt-3 bg-white/5 border border-white/10 text-white font-bold py-4 rounded hover:bg-white/10 transition-all"
+          >
+            Purchase Verification Bot
           </button>
         </form>
 

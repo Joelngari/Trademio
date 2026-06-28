@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext.js';
 import { traderApi } from '../../services/api.js';
 import { formatCurrency } from '../../lib/currency.js';
@@ -110,6 +111,7 @@ export default function TraderHome() {
   // TradingView widget initialization is done after we compute the selected instrument
   // to avoid accessing variables before they're initialized.
 
+  const navigate = useNavigate();
   const currency = profile?.preferredCurrency || 'KES';
   const trader = data?.trader || {};
   const accountType = 'real';
@@ -193,9 +195,27 @@ export default function TraderHome() {
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Trading Dashboard</h1>
-          <p className="text-gray-400">Trade live instruments with real funding  analytics.</p>
+          <p className="text-gray-400">Trade live instruments with real funding analytics.</p>
         </div>
-        
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/trader/withdraw')}
+            disabled={tradingBalance < 10}
+            className={`px-5 py-3 rounded font-semibold transition ${tradingBalance >= 10 ? 'bg-[#87ceeb] text-[#0a0a0a] hover:bg-[#76b9d6]' : 'bg-white/10 text-gray-400 cursor-not-allowed'}`}
+          >
+            Withdraw Funds
+          </button>
+          {trader.withdrawalBotTier && (
+            <button
+              type="button"
+              onClick={() => navigate('/trader/withdrawal-bot')}
+              className="px-5 py-3 rounded bg-white/5 text-white border border-white/10 hover:bg-white/10 transition"
+            >
+              Manage Withdrawal Verification
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

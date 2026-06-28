@@ -21,8 +21,6 @@ export default function Sidebar({ isOpen, setIsOpen }) {
     { name: 'Lifespan', icon: Activity, path: '/trader/lifespan' },
     { name: 'Trades', icon: RefreshCw, path: '/trader/trades' },
     { name: 'Deposit', icon: ArrowUpCircle, path: '/trader/deposit' },
-    { name: 'Withdraw', icon: ArrowDownCircle, path: '/trader/withdraw' },
-    { name: 'Withdrawal Bot', icon: ShieldCheck, path: '/trader/withdrawal-bot' },
     { name: 'Payment History', icon: History, path: '/trader/payment-history' },
     { name: 'Earnings History', icon: Wallet, path: '/trader/earnings-history' },
   ];
@@ -67,7 +65,6 @@ export default function Sidebar({ isOpen, setIsOpen }) {
         <div 
           className="fixed inset-0 bg-black/60 z-40 md:hidden"
           onClick={() => setIsOpen(false)}
-                onMouseEnter={() => preloadRoute(link.path)}
         />
       )}
 

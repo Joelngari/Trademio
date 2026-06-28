@@ -2190,32 +2190,59 @@ app.post('/api/trader/withdraw', authMiddleware, roleMiddleware(['trader']), asy
     const data = withdrawalSchema.parse(req.body);
     const reviewHours = Number(req.body.reviewHours || process.env.WITHDRAWAL_REVIEW_WINDOW_HOURS || 24);
 
-    const withdrawalRef = adminDb.collection('withdrawals').doc();
-    const nextActionAt = getReviewDeadline(reviewHours);
+    const result = await adminDb.runTransaction(async (t) => {
+      const traderRef = adminDb.collection('traders').doc(req.user.uid);
+      const traderDoc = await t.get(traderRef);
+      const trader = traderDoc.exists ? traderDoc.data() : null;
 
-    await withdrawalRef.set({
-      id: withdrawalRef.id,
-      traderId: req.user.uid,
-      amount: data.amount,
-      phoneNumber: data.phoneNumber,
-      status: 'pending',
-      reviewWindowHours: reviewHours,
-      nextActionAt,
-      requestedAt: admin.firestore.FieldValue.serverTimestamp(),
-      lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+      if (!trader?.verificationBotTier) {
+        throw new Error('You must own a verification bot to request withdrawal.');
+      }
 
-    res.json({
-      message: 'Withdrawal requested successfully',
-      withdrawal: {
+      if (trader.verificationBotMaxAmount && data.amount > trader.verificationBotMaxAmount) {
+        throw new Error(`Your ${trader.verificationBotTier} bot tier only allows withdrawals up to ${trader.verificationBotMaxAmount}.`);
+      }
+
+      const currentBalance = Number(trader.tradingBalance || 0);
+      if (data.amount > currentBalance) {
+        throw new Error('Insufficient trading balance.');
+      }
+
+      const withdrawalRef = adminDb.collection('withdrawals').doc();
+      const nextActionAt = getReviewDeadline(reviewHours);
+
+      t.set(withdrawalRef, {
+        id: withdrawalRef.id,
+        traderId: req.user.uid,
+        amount: data.amount,
+        phoneNumber: data.phoneNumber || null,
+        status: 'pending',
+        reviewWindowHours: reviewHours,
+        nextActionAt,
+        botFamily: trader.withdrawalBotFamily || null,
+        botRole: trader.withdrawalBotRole || null,
+        botCategory: trader.withdrawalBotCategory || null,
+        withdrawalPackageId: trader.withdrawalBotPackageId || null,
+        verificationPackageId: trader.verificationBotPackageId || null,
+        requestedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      t.update(traderRef, {
+        tradingBalance: admin.firestore.FieldValue.increment(-Number(data.amount))
+      });
+
+      return {
         id: withdrawalRef.id,
         amount: data.amount,
-        phoneNumber: data.phoneNumber,
+        phoneNumber: data.phoneNumber || null,
         status: 'pending',
-        nextActionAt,
-        statusLabel: getWithdrawalStatusLabel('pending')
-      }
+        nextActionAt
+      };
     });
+
+    invalidateCache('withdrawals', 'traders');
+    res.json({ message: 'Withdrawal requested successfully', withdrawal: { ...result, statusLabel: getWithdrawalStatusLabel('pending') } });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -2325,27 +2352,36 @@ app.post('/api/admin/withdrawals/:requestId/reject', authMiddleware, roleMiddlew
     const { requestId } = req.params;
     const { note } = req.body;
 
-    const withdrawalRef = adminDb.collection('withdrawals').doc(requestId);
-    const withdrawalDoc = await withdrawalRef.get();
+    await adminDb.runTransaction(async (t) => {
+      const withdrawalRef = adminDb.collection('withdrawals').doc(requestId);
+      const withdrawalDoc = await t.get(withdrawalRef);
 
-    if (!withdrawalDoc.exists) {
-      return res.status(404).json({ message: 'Request not found' });
-    }
+      if (!withdrawalDoc.exists) {
+        throw new Error('Request not found');
+      }
 
-    const withdrawal = withdrawalDoc.data();
-    if (withdrawal.status === 'paid' || withdrawal.status === 'rejected') {
-      return res.status(400).json({ message: 'This request is already closed' });
-    }
+      const withdrawal = withdrawalDoc.data();
+      if (withdrawal.status === 'paid' || withdrawal.status === 'rejected') {
+        throw new Error('This request is already closed');
+      }
 
-    await withdrawalRef.update({
-      status: 'rejected',
-      rejectedAt: admin.firestore.FieldValue.serverTimestamp(),
-      adminNote: note || 'Rejected by admin',
-      lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+      t.update(withdrawalRef, {
+        status: 'rejected',
+        rejectedAt: admin.firestore.FieldValue.serverTimestamp(),
+        adminNote: note || 'Rejected by admin',
+        lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      if (withdrawal.traderId && Number(withdrawal.amount) > 0) {
+        const traderRef = adminDb.collection('traders').doc(withdrawal.traderId);
+        t.update(traderRef, {
+          tradingBalance: admin.firestore.FieldValue.increment(Number(withdrawal.amount))
+        });
+      }
     });
 
-    invalidateCache('withdrawals');
-    res.json({ message: 'Withdrawal rejected', withdrawalId: requestId });
+    invalidateCache('withdrawals', 'traders');
+    res.json({ message: 'Withdrawal rejected and refunded', withdrawalId: requestId });
   } catch (error) {
     res.status(400).json({ message: error.message || 'Failed to reject withdrawal' });
   }

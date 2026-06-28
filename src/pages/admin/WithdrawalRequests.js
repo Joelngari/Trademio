@@ -76,7 +76,7 @@ export default function WithdrawalRequests() {
       </div>
 
       <div className="flex gap-2 p-1 bg-white/5 rounded w-max flex-wrap">
-        {['pending', 'ready_for_processing_by_platform', 'pending_processing_by_platform', 'in_processing', 'paid', 'rejected', 'all'].map((t) => (
+        {['pending', 'verified', 'paid', 'rejected', 'all'].map((t) => (
           <button
             key={t}
             onClick={() => {setTab(t); setLoading(true);}}

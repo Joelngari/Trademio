@@ -8,8 +8,6 @@
     '/trader/lifespan': () => import('../pages/trader/Lifespan.js'),
     '/trader/trades': () => import('../pages/trader/Trades.js'),
     '/trader/deposit': () => import('../pages/trader/Deposit.js'),
-    '/trader/withdraw': () => import('../pages/trader/Withdraw.js'),
-    '/trader/withdrawal-bot': () => import('../pages/trader/WithdrawalBot.js'),
     '/trader/payment-history': () => import('../pages/trader/PaymentHistory.js'),
     '/trader/earnings-history': () => import('../pages/trader/EarningsHistory.js'),
     '/marketer/home': () => import('../pages/marketer/Home.js'),
