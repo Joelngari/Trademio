@@ -6,6 +6,7 @@ import Sidebar from './components/Sidebar.js';
 import TopBar from './components/TopBar.js';
 import TickerTape from './components/TickerTape.js';
 import SkeletonLoader from './components/SkeletonLoader.js';
+import Footer from './components/Footer.js';
 
 // Auth Pages
 const Login = lazy(() => import('./pages/auth/Login.js'));
@@ -51,17 +52,20 @@ function DashboardLayout({ children }) {
   const isTrader = location.pathname.startsWith('/trader');
 
   return (
-    <div className="flex min-h-screen bg-[#0a0a0a]">
-      <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
-      <div className="flex-1 flex flex-col min-w-0 md:pl-64">
-        {isTrader && <TickerTape />}
-        <TopBar setIsOpen={setIsSidebarOpen} />
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-          <Suspense fallback={<SkeletonLoader type="card" />}>
-            {children}
-          </Suspense>
-        </main>
+    <div className="flex min-h-screen bg-[#0a0a0a] flex-col">
+      <div className="flex flex-1">
+        <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+        <div className="flex-1 flex flex-col min-w-0 md:pl-64">
+          {isTrader && <TickerTape />}
+          <TopBar setIsOpen={setIsSidebarOpen} />
+          <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+            <Suspense fallback={<SkeletonLoader type="card" />}>
+              {children}
+            </Suspense>
+          </main>
+        </div>
       </div>
+      <Footer />
     </div>
   );
 }

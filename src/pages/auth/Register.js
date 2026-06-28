@@ -5,6 +5,7 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'fire
 import { doc, setDoc } from 'firebase/firestore';
 import { authApi } from '../../services/api.js';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
+import Footer from '../../components/Footer.js';
 
 export default function Register() {
   const [searchParams] = useSearchParams();
@@ -99,9 +100,10 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-[#121212] border border-white/5 rounded p-8 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-1 bg-[#87ceeb]/20" />
+    <div className="min-h-screen bg-[#0a0a0a] flex flex-col">
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-[#121212] border border-white/5 rounded p-8 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-[#87ceeb]/20" />
         
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
@@ -213,6 +215,8 @@ export default function Register() {
           </Link>
         </p>
       </div>
+      </div>
+      <Footer />
     </div>
   );
 }
