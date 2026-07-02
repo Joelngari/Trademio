@@ -206,7 +206,7 @@ export default function TraderHome() {
           >
             Withdraw Funds
           </button>
-          {trader.withdrawalBotTier && (
+          {(trader.withdrawalBotPackageName || trader.withdrawalBotFamily || trader.withdrawalBotTier || trader.verificationBotPackageName || trader.verificationBotFamily || trader.verificationBotTier) && (
             <button
               type="button"
               onClick={() => navigate('/trader/withdrawal-bot')}

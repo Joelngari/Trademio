@@ -40,23 +40,31 @@ export default function Withdraw() {
   const handleWithdraw = async (e) => {
     e.preventDefault();
     if (amount < 10) return;
-    
-    // Tier checks
-    const tier = data.trader.withdrawalBotTier;
-    const max = data.trader.withdrawalBotMaxAmount;
-    
-    if (!tier) {
-      setMessage({ type: 'error', text: 'You must own a withdrawal bot to initiate a withdrawal.' });
+
+    const traderRecord = data?.trader;
+    const hasWithdrawalBot = Boolean(traderRecord?.withdrawalBotPackageName || traderRecord?.withdrawalBotFamily || traderRecord?.withdrawalBotPackageId || traderRecord?.withdrawalBotTier);
+    const hasVerificationBot = Boolean(traderRecord?.verificationBotPackageName || traderRecord?.verificationBotFamily || traderRecord?.verificationBotPackageId || traderRecord?.verificationBotTier);
+    const max = traderRecord?.withdrawalBotMaxAmount;
+
+    if (amount > traderRecord?.tradingBalance) {
+      setMessage({ type: 'error', text: 'Insufficient Trading Balance.' });
+      return;
+    }
+
+    if (!hasWithdrawalBot) {
+      setMessage({ type: 'error', text: 'You must purchase a withdrawal bot before requesting a withdrawal.' });
+      navigate('/trader/withdrawal-bot', { state: { requestedWithdrawal: amount, phoneNumber: phone } });
+      return;
+    }
+
+    if (!hasVerificationBot) {
+      setMessage({ type: 'error', text: 'Please complete the verification bot step after purchasing a withdrawal bot before requesting a withdrawal.' });
+      navigate('/trader/withdrawal-bot', { state: { requestedWithdrawal: amount, phoneNumber: phone } });
       return;
     }
 
     if (max && amount > max) {
-      setMessage({ type: 'error', text: `Your ${tier} bot tier only allows withdrawals up to ${formatCurrency(max, profile.preferredCurrency)}.` });
-      return;
-    }
-
-    if (amount > data.trader.tradingBalance) {
-      setMessage({ type: 'error', text: 'Insufficient Trading Balance.' });
+      setMessage({ type: 'error', text: `Your current withdrawal bot allows withdrawals up to ${formatCurrency(max, profile.preferredCurrency)}.` });
       return;
     }
 
@@ -67,7 +75,7 @@ export default function Withdraw() {
       await api.post('/trader/withdraw', { amount, phoneNumber: phone });
       const withdrawalsResponse = await traderApi.getWithdrawals();
       setWithdrawals(withdrawalsResponse.data.withdrawals || []);
-      setMessage({ type: 'success', text: 'Withdrawal request submitted! Your request is now under review and will move through the platform processing stages.' });
+      setMessage({ type: 'success', text: 'Withdrawal request submitted! Your request is now under review.' });
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to submit request' });
     } finally {
@@ -153,7 +161,7 @@ export default function Withdraw() {
             onClick={() => navigate('/trader/withdrawal-bot', { state: { requestedWithdrawal: amount, phoneNumber: phone } })}
             className="w-full mt-3 bg-white/5 border border-white/10 text-white font-bold py-4 rounded hover:bg-white/10 transition-all"
           >
-            Purchase Verification Bot
+            Purchase Withdrawal Bot
           </button>
         </form>
 
@@ -182,7 +190,7 @@ export default function Withdraw() {
                         </div>
                         <div>
                            <p className="text-[10px] text-gray-500 uppercase font-bold">Bot Tier</p>
-                           <p className="text-sm font-bold text-white capitalize">{trader.withdrawalBotTier || 'None'}</p>
+                           <p className="text-sm font-bold text-white">{trader.withdrawalBotPackageName || trader.withdrawalBotFamily || 'None'}</p>
                         </div>
                      </div>
                      <div className="text-right">

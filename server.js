@@ -281,10 +281,22 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
 async function activateBotPurchase(traderRef, pkg, botPurchaseRef, marketerId, t, transactionId) {
   // Handle type-specific activation
   if (pkg.type === 'withdrawal-bot') {
-    // Set withdrawal bot tier and max amount on trader
     t.update(traderRef, {
-      withdrawalBotTier: pkg.tier,
-      withdrawalBotMaxAmount: pkg.maxAmount,
+      withdrawalBotPackageId: pkg.id,
+      withdrawalBotPackageName: pkg.name,
+      withdrawalBotFamily: pkg.botFamily || null,
+      withdrawalBotCategory: pkg.category || null,
+      withdrawalBotMaxAmount: pkg.maxAmount || null,
+      withdrawalBotTier: 'active',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+  } else if (pkg.type === 'verification-bot') {
+    t.update(traderRef, {
+      verificationBotPackageId: pkg.id,
+      verificationBotPackageName: pkg.name,
+      verificationBotFamily: pkg.botFamily || null,
+      verificationBotCategory: pkg.category || null,
+      verificationBotTier: 'active',
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
   } else if (['forex', 'crypto', 'mining', 'investment', 'lifespan'].includes(pkg.type)) {
@@ -297,6 +309,12 @@ async function activateBotPurchase(traderRef, pkg, botPurchaseRef, marketerId, t
     const sessionRef = adminDb.collection('sessions').doc();
     const startedAt = Date.now();
     const endsAt = startedAt + durationMs;
+
+    // Derive a family name for this package so we can persist it on the trader
+    // Prefer explicit pkg.botFamily if present, otherwise derive from pkg.name
+    const rawFamily = String(pkg.botFamily || '').trim();
+    let derivedFamily = rawFamily || String(pkg.name || '').trim().toUpperCase().replace(/\s+(FOREX|CRYPTO|RIG|BOT|INVESTMENT|LIFESPAN)$/i, '').trim();
+    if (derivedFamily === '') derivedFamily = null;
 
     const sessionData = {
       id: sessionRef.id,
@@ -316,8 +334,11 @@ async function activateBotPurchase(traderRef, pkg, botPurchaseRef, marketerId, t
     };
 
     t.set(sessionRef, sessionData);
+    // Persist active session and last-trading metadata on the trader
     t.update(traderRef, { 
       activeSessionId: sessionRef.id,
+      lastTradingPackageName: pkg.name || null,
+      lastTradingFamily: derivedFamily,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
   }
@@ -351,8 +372,17 @@ app.post('/api/payments/stk-push', authMiddleware, paymentLimiter, async (req, r
       
       // Check if partial payment: requestedAmount < package price
       if (requestedAmount && requestedAmount > 0 && requestedAmount < pkgData.price) {
+        const normalizedType = String(pkgData.type || '').toLowerCase();
+        const normalizedName = String(pkgData.name || '').toLowerCase();
+        const botTypes = ['withdrawal-bot', 'verification-bot', 'forex', 'crypto', 'mining', 'investment', 'lifespan'];
+        const isPartialBot = botTypes.includes(normalizedType)
+          || normalizedType.includes('verification')
+          || normalizedType.includes('withdrawal')
+          || normalizedName.includes('verification bot')
+          || normalizedName.includes('withdrawal bot');
+
         // Partial payment for a bot
-        if (['withdrawal-bot', 'forex', 'crypto', 'mining', 'investment', 'lifespan'].includes(pkgData.type)) {
+        if (isPartialBot) {
           amount = requestedAmount;
           
           // If botPurchaseId provided, validate and link to existing botPurchase (resuming payment)
@@ -2022,25 +2052,68 @@ async function seedDatabase() {
   console.log('🌱 seedDatabase: Packages check done, empty:', packagesCheck.empty);
   if (packagesCheck.empty) {
     const pkgs = [
-      // Forex
-      { type: 'forex', name: 'Astro Bot', price: 1500, expectedReturn: 12000, duration: 60 },
-      { type: 'forex', name: 'Synapse Bot', price: 3000, expectedReturn: 24000, duration: 60 },
-      { type: 'forex', name: 'Golden Bot', price: 5500, expectedReturn: 44000, duration: 60 },
-      // Crypto
-      { type: 'crypto', name: 'Flux Bot', price: 10000, expectedReturn: 80000, duration: 60 },
-      { type: 'crypto', name: 'Vexo Bot', price: 15000, expectedReturn: 120000, duration: 60 },
-      { type: 'crypto', name: 'Quantum Bot', price: 20000, expectedReturn: 200000, duration: 60 },
-      // Mining
-      { type: 'mining', name: 'Block Rig', price: 2500, expectedReturn: 5000, duration: 60, hashrate: '50 TH/s' },
-      { type: 'mining', name: 'Pulse Rig', price: 3500, expectedReturn: 8000, duration: 60, hashrate: '120 TH/s' },
-      { type: 'mining', name: 'Crypto Quarry', price: 5000, expectedReturn: 12000, duration: 60, hashrate: '500 TH/s' },
-      // Lifespan
-      { type: 'lifespan', name: 'Margin Bot', price: 11500, expectedReturn: 100000, duration: 3 }, // days handled by duration logic
-      { type: 'lifespan', name: 'Nexa Bot', price: 15000, expectedReturn: 500000, duration: 7 },
-      // Withdrawal Bots
-      { type: 'withdrawal-bot', name: 'Basic Bot', price: 2000, tier: 'basic', maxAmount: 20000 },
-      { type: 'withdrawal-bot', name: 'Standard Bot', price: 3500, tier: 'standard', maxAmount: 40000 },
-      { type: 'withdrawal-bot', name: 'Premium Bot', price: 5000, tier: 'premium', maxAmount: null }
+      // Forex trading packages (family-specific)
+      { type: 'forex', name: 'TITAN FOREX BOT', price: 1500, expectedReturn: 12000, duration: 60, botFamily: 'TITAN FOREX' },
+      { type: 'forex', name: 'ASTRO FOREX BOT', price: 1500, expectedReturn: 12000, duration: 60, botFamily: 'ASTRO' },
+      { type: 'forex', name: 'SYNAPSE FOREX BOT', price: 3000, expectedReturn: 24000, duration: 60, botFamily: 'SYNAPSE' },
+      { type: 'forex', name: 'GOLDEN FOREX BOT', price: 5500, expectedReturn: 44000, duration: 60, botFamily: 'GOLDEN' },
+      { type: 'forex', name: 'PHOENIX FOREX BOT', price: 4000, expectedReturn: 32000, duration: 60, botFamily: 'PHOENIX' },
+      { type: 'forex', name: 'ORACLE FOREX BOT', price: 4500, expectedReturn: 36000, duration: 60, botFamily: 'ORACLE' },
+
+      // Crypto trading packages
+      { type: 'crypto', name: 'FLUX CRYPTO BOT', price: 10000, expectedReturn: 80000, duration: 60, botFamily: 'FLUX' },
+      { type: 'crypto', name: 'VEXO CRYPTO BOT', price: 15000, expectedReturn: 120000, duration: 60, botFamily: 'VEXO' },
+      { type: 'crypto', name: 'QUANTUM CRYPTO BOT', price: 20000, expectedReturn: 200000, duration: 60, botFamily: 'QUANTUM' },
+
+      // Mining packages
+      { type: 'mining', name: 'BLOCK RIG', price: 2500, expectedReturn: 5000, duration: 60, hashrate: '50 TH/s', botFamily: 'BLOCK' },
+      { type: 'mining', name: 'PULSE RIG', price: 3500, expectedReturn: 8000, duration: 60, hashrate: '120 TH/s', botFamily: 'PULSE' },
+      { type: 'mining', name: 'CRYPTO QUARRY', price: 5000, expectedReturn: 12000, duration: 60, hashrate: '500 TH/s', botFamily: 'QUARRY' },
+
+      // Lifespan packages
+      { type: 'lifespan', name: 'MARGIN BOT', price: 11500, expectedReturn: 100000, duration: 3, botFamily: 'MARGIN' },
+      { type: 'lifespan', name: 'NEXA BOT', price: 15000, expectedReturn: 500000, duration: 7, botFamily: 'NEXA' },
+
+      // Withdrawal + Verification packages (one-per-family, no tiers)
+      { type: 'withdrawal-bot', name: 'TITAN FOREX WITHDRAWAL BOT', price: 2000, maxAmount: 20000, botFamily: 'TITAN FOREX' },
+      { type: 'verification-bot', name: 'TITAN FOREX VERIFICATION BOT', price: 1000, botFamily: 'TITAN FOREX' },
+
+      { type: 'withdrawal-bot', name: 'ASTRO WITHDRAWAL BOT', price: 1800, maxAmount: 15000, botFamily: 'ASTRO' },
+      { type: 'verification-bot', name: 'ASTRO VERIFICATION BOT', price: 900, botFamily: 'ASTRO' },
+
+      { type: 'withdrawal-bot', name: 'SYNAPSE WITHDRAWAL BOT', price: 2500, maxAmount: 30000, botFamily: 'SYNAPSE' },
+      { type: 'verification-bot', name: 'SYNAPSE VERIFICATION BOT', price: 1200, botFamily: 'SYNAPSE' },
+
+      { type: 'withdrawal-bot', name: 'GOLDEN WITHDRAWAL BOT', price: 3000, maxAmount: 40000, botFamily: 'GOLDEN' },
+      { type: 'verification-bot', name: 'GOLDEN VERIFICATION BOT', price: 1500, botFamily: 'GOLDEN' },
+      { type: 'withdrawal-bot', name: 'PHOENIX WITHDRAWAL BOT', price: 2000, maxAmount: 40000, botFamily: 'PHOENIX' },
+      { type: 'verification-bot', name: 'PHOENIX VERIFICATION BOT', price: 1000, botFamily: 'PHOENIX' },
+      { type: 'withdrawal-bot', name: 'ORACLE WITHDRAWAL BOT', price: 2250, maxAmount: 45000, botFamily: 'ORACLE' },
+      { type: 'verification-bot', name: 'ORACLE VERIFICATION BOT', price: 1125, botFamily: 'ORACLE' },
+
+      { type: 'withdrawal-bot', name: 'FLUX WITHDRAWAL BOT', price: 4000, maxAmount: 80000, botFamily: 'FLUX' },
+      { type: 'verification-bot', name: 'FLUX VERIFICATION BOT', price: 1800, botFamily: 'FLUX' },
+
+      { type: 'withdrawal-bot', name: 'VEXO WITHDRAWAL BOT', price: 4500, maxAmount: 120000, botFamily: 'VEXO' },
+      { type: 'verification-bot', name: 'VEXO VERIFICATION BOT', price: 2000, botFamily: 'VEXO' },
+
+      { type: 'withdrawal-bot', name: 'QUANTUM WITHDRAWAL BOT', price: 5000, maxAmount: null, botFamily: 'QUANTUM' },
+      { type: 'verification-bot', name: 'QUANTUM VERIFICATION BOT', price: 2500, botFamily: 'QUANTUM' },
+
+      { type: 'withdrawal-bot', name: 'BLOCK WITHDRAWAL BOT', price: 1800, maxAmount: 20000, botFamily: 'BLOCK' },
+      { type: 'verification-bot', name: 'BLOCK VERIFICATION BOT', price: 900, botFamily: 'BLOCK' },
+
+      { type: 'withdrawal-bot', name: 'PULSE WITHDRAWAL BOT', price: 2000, maxAmount: 30000, botFamily: 'PULSE' },
+      { type: 'verification-bot', name: 'PULSE VERIFICATION BOT', price: 1000, botFamily: 'PULSE' },
+
+      { type: 'withdrawal-bot', name: 'QUARRY WITHDRAWAL BOT', price: 2200, maxAmount: 40000, botFamily: 'QUARRY' },
+      { type: 'verification-bot', name: 'QUARRY VERIFICATION BOT', price: 1100, botFamily: 'QUARRY' },
+
+      { type: 'withdrawal-bot', name: 'MARGIN WITHDRAWAL BOT', price: 3500, maxAmount: 100000, botFamily: 'MARGIN' },
+      { type: 'verification-bot', name: 'MARGIN VERIFICATION BOT', price: 1600, botFamily: 'MARGIN' },
+
+      { type: 'withdrawal-bot', name: 'NEXA WITHDRAWAL BOT', price: 4500, maxAmount: 500000, botFamily: 'NEXA' },
+      { type: 'verification-bot', name: 'NEXA VERIFICATION BOT', price: 2200, botFamily: 'NEXA' }
     ];
 
     const batch = adminDb.batch();
@@ -2051,6 +2124,84 @@ async function seedDatabase() {
     console.log('🌱 seedDatabase: Batch commit for packages...');
     await batch.commit();
     console.log('🌱 seedDatabase: Packages seeded successfully');
+  } else {
+    console.log('🌱 seedDatabase: Packages already exist, checking for missing withdrawal/verification families...');
+    const packagesSnapshot = await adminDb.collection('packages').get();
+    const packages = packagesSnapshot.docs.map((doc) => doc.data());
+    const tradingTypes = new Set(['forex', 'crypto', 'mining', 'investment', 'lifespan']);
+    const tradingByFamily = new Map();
+    const withdrawalFamilies = new Set();
+    const verificationFamilies = new Set();
+
+    const deriveFamilyFromName = (name = '') => {
+      const normalized = String(name).trim().toUpperCase();
+      const match = normalized.match(/^(.*?)\s+(FOREX|CRYPTO|RIG|BOT|INVESTMENT|LIFESPAN)$/i);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+      return normalized || null;
+    };
+
+    packages.forEach((pkg) => {
+      const rawFamily = String(pkg.botFamily || '').trim();
+      const family = rawFamily || deriveFamilyFromName(pkg.name || '');
+      if (!family) return;
+      if (pkg.type === 'withdrawal-bot') withdrawalFamilies.add(family.toUpperCase());
+      if (pkg.type === 'verification-bot') verificationFamilies.add(family.toUpperCase());
+      if (tradingTypes.has(pkg.type) && !tradingByFamily.has(family.toUpperCase())) {
+        tradingByFamily.set(family.toUpperCase(), pkg);
+      }
+    });
+
+    const batch = adminDb.batch();
+    let missingPackageCount = 0;
+
+    tradingByFamily.forEach((tradingPkg, familyKey) => {
+      const family = familyKey;
+      const existingWithdrawal = withdrawalFamilies.has(family);
+      const existingVerification = verificationFamilies.has(family);
+      if (existingWithdrawal && existingVerification) return;
+
+      const basePrice = Number(tradingPkg.price || 1000);
+      const withdrawalPrice = Math.max(500, Math.round(basePrice * 0.5));
+      const verificationPrice = Math.max(250, Math.round(withdrawalPrice * 0.4));
+      const maxAmount = Math.max(20000, Math.round(basePrice * 5));
+
+      if (!existingWithdrawal) {
+        const withdrawalRef = adminDb.collection('packages').doc();
+        batch.set(withdrawalRef, {
+          id: withdrawalRef.id,
+          type: 'withdrawal-bot',
+          name: `${family} WITHDRAWAL BOT`,
+          price: withdrawalPrice,
+          maxAmount,
+          botFamily: family,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        missingPackageCount += 1;
+      }
+
+      if (!existingVerification) {
+        const verificationRef = adminDb.collection('packages').doc();
+        batch.set(verificationRef, {
+          id: verificationRef.id,
+          type: 'verification-bot',
+          name: `${family} VERIFICATION BOT`,
+          price: verificationPrice,
+          botFamily: family,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        missingPackageCount += 1;
+      }
+    });
+
+    if (missingPackageCount > 0) {
+      console.log(`🌱 seedDatabase: Adding ${missingPackageCount} missing withdrawal/verification packages for existing families...`);
+      await batch.commit();
+      console.log('🌱 seedDatabase: Missing packages created successfully');
+    } else {
+      console.log('🌱 seedDatabase: No missing withdrawal/verification packages found');
+    }
   }
 
   console.log('🌱 seedDatabase: Starting admin user seed...');
@@ -2195,12 +2346,13 @@ app.post('/api/trader/withdraw', authMiddleware, roleMiddleware(['trader']), asy
       const traderDoc = await t.get(traderRef);
       const trader = traderDoc.exists ? traderDoc.data() : null;
 
-      if (!trader?.verificationBotTier) {
+      const hasVerificationBot = Boolean(trader?.verificationBotPackageId || trader?.verificationBotPackageName || trader?.verificationBotFamily || trader?.verificationBotTier);
+      if (!hasVerificationBot) {
         throw new Error('You must own a verification bot to request withdrawal.');
       }
 
       if (trader.verificationBotMaxAmount && data.amount > trader.verificationBotMaxAmount) {
-        throw new Error(`Your ${trader.verificationBotTier} bot tier only allows withdrawals up to ${trader.verificationBotMaxAmount}.`);
+        throw new Error(`Your verification bot only allows withdrawals up to ${trader.verificationBotMaxAmount}.`);
       }
 
       const currentBalance = Number(trader.tradingBalance || 0);
@@ -2344,6 +2496,51 @@ app.post('/api/admin/withdrawals/:requestId/advance', authMiddleware, roleMiddle
     res.json(result);
   } catch (error) {
     res.status(400).json({ message: error.message || 'Failed to advance withdrawal' });
+  }
+});
+
+app.post('/api/admin/withdrawals/:requestId/mark-paid', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { note, mpesaReceiptNumber } = req.body;
+
+    const result = await adminDb.runTransaction(async (t) => {
+      const withdrawalRef = adminDb.collection('withdrawals').doc(requestId);
+      const withdrawalDoc = await t.get(withdrawalRef);
+
+      if (!withdrawalDoc.exists) {
+        throw new Error('Request not found');
+      }
+
+      const withdrawal = withdrawalDoc.data();
+      if (withdrawal.status === 'paid' || withdrawal.status === 'rejected') {
+        throw new Error('This request is already closed');
+      }
+
+      const traderRef = adminDb.collection('traders').doc(withdrawal.traderId);
+      const traderDoc = await t.get(traderRef);
+      const trader = traderDoc.data();
+
+      if (!trader || (trader.tradingBalance || 0) < 0) {
+        throw new Error('Unable to finalize this withdrawal right now');
+      }
+
+      t.update(withdrawalRef, {
+        status: 'paid',
+        adminNote: note || 'Marked as paid by admin',
+        paidAt: admin.firestore.FieldValue.serverTimestamp(),
+        resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+        mpesaReceiptNumber: mpesaReceiptNumber || withdrawal.mpesaReceiptNumber || null,
+        lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return { success: true, message: 'Withdrawal marked as paid', withdrawal: { id: requestId, status: 'paid' } };
+    });
+
+    invalidateCache('withdrawals', 'traders');
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Failed to mark withdrawal as paid' });
   }
 });
 

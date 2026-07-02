@@ -60,8 +60,7 @@ export const adminApi = {
   topUpBotPurchase: (id, amount, note) => api.post(`/admin/bot-purchase/${id}/top-up`, { amount, note }),
   markBotPurchasePaid: (id, note) => api.post(`/admin/bot-purchase/${id}/mark-paid`, { note }),
   getWithdrawals: (query) => api.get('/admin/withdrawals', { params: query }),
-  advanceWithdrawal: (id, data) => api.post(`/admin/withdrawals/${id}/advance`, data),
-  extendWithdrawal: (id, data) => api.post(`/admin/withdrawals/${id}/extend`, data),
+  markWithdrawalPaid: (id, data) => api.post(`/admin/withdrawals/${id}/mark-paid`, data),
   rejectWithdrawal: (id, data) => api.post(`/admin/withdrawals/${id}/reject`, data),
 };
 

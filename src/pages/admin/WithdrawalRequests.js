@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { formatKSh } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
-import { Check, X, Clock3, Zap, RefreshCcw } from 'lucide-react';
+import { Check, X, Clock3 } from 'lucide-react';
 import { adminApi } from '../../services/api.js';
 
 export default function WithdrawalRequests() {
@@ -24,26 +24,12 @@ export default function WithdrawalRequests() {
     fetchWithdrawals();
   }, [tab]);
 
-  const handleAdvance = async (req) => {
-    const note = window.prompt('Add a note for the next stage:');
+  const handleMarkPaid = async (req) => {
+    const note = window.prompt('Add a note for the payment confirmation:');
     if (note === null) return;
     try {
-      await adminApi.advanceWithdrawal(req.id, { note });
-      alert('Withdrawal moved forward successfully');
-      setLoading(true);
-      const response = await adminApi.getWithdrawals({ status: tab === 'all' ? undefined : tab });
-      setRequests(response.data.withdrawals || []);
-    } catch (err) {
-      alert('Failed: ' + (err.response?.data?.message || err.message));
-    }
-  };
-
-  const handleExtend = async (req) => {
-    const hours = Number(window.prompt('Extend review window by how many hours?', '24'));
-    if (!hours || Number.isNaN(hours)) return;
-    try {
-      await adminApi.extendWithdrawal(req.id, { hours });
-      alert('Withdrawal timeline extended');
+      await adminApi.markWithdrawalPaid(req.id, { note });
+      alert('Withdrawal marked as paid');
       setLoading(true);
       const response = await adminApi.getWithdrawals({ status: tab === 'all' ? undefined : tab });
       setRequests(response.data.withdrawals || []);
@@ -133,29 +119,20 @@ export default function WithdrawalRequests() {
                         {r.status !== 'paid' && r.status !== 'rejected' && (
                           <>
                             <button 
-                              onClick={() => handleAdvance(r)}
+                              onClick={() => handleMarkPaid(r)}
                               className="p-2 bg-green-500/10 text-green-500 hover:bg-green-500/20 rounded border border-green-500/20"
-                              title="Advance to next stage"
+                              title="Mark as paid"
                             >
                               <Check size={16} />
                             </button>
                             <button 
-                              onClick={() => handleExtend(r)}
-                              className="p-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 rounded border border-blue-500/20"
-                              title="Extend review window"
+                              onClick={() => handleReject(r)}
+                              className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded border border-red-500/20"
+                              title="Reject request"
                             >
-                              <RefreshCcw size={16} />
+                              <X size={16} />
                             </button>
                           </>
-                        )}
-                        {r.status !== 'paid' && r.status !== 'rejected' && (
-                          <button 
-                            onClick={() => handleReject(r)}
-                            className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded border border-red-500/20"
-                            title="Reject request"
-                          >
-                            <X size={16} />
-                          </button>
                         )}
                       </div>
                     </td>
