@@ -841,6 +841,10 @@ async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) 
       const startedAt = Date.now();
       const endsAt = startedAt + durationMs;
 
+      const rawFamily = String(pkg.botFamily || '').trim();
+      let derivedFamily = rawFamily || String(pkg.name || '').trim().toUpperCase().replace(/\s+(FOREX|CRYPTO|RIG|BOT|INVESTMENT|LIFESPAN)$/i, '').trim();
+      if (derivedFamily === '') derivedFamily = null;
+
       const sessionData = {
         id: sessionRef.id,
         traderId: transData.traderId,
@@ -859,7 +863,12 @@ async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) 
       };
 
       t.set(sessionRef, sessionData);
-      t.update(traderRef, { activeSessionId: sessionRef.id });
+      t.update(traderRef, {
+        activeSessionId: sessionRef.id,
+        lastTradingPackageName: pkg.name || null,
+        lastTradingFamily: derivedFamily,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
     } else if (transData.type === 'withdrawal-bot') {
       t.update(traderRef, {
         withdrawalBotTier: pkg.tier,
