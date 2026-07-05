@@ -887,9 +887,32 @@ const SUPPORTED_INSTRUMENTS = [
   { symbol: 'EURUSD', displayName: 'EUR / USD', type: 'Forex', chartSymbol: 'FX:EURUSD', basePrice: 1.0900, spread: 0.0002, decimals: 5 },
   { symbol: 'GBPUSD', displayName: 'GBP / USD', type: 'Forex', chartSymbol: 'FX:GBPUSD', basePrice: 1.2700, spread: 0.00025, decimals: 5 },
   { symbol: 'USDJPY', displayName: 'USD / JPY', type: 'Forex', chartSymbol: 'FX:USDJPY', basePrice: 157.20, spread: 0.02, decimals: 3 },
+  { symbol: 'AUDUSD', displayName: 'AUD / USD', type: 'Forex', chartSymbol: 'FX:AUDUSD', basePrice: 0.6600, spread: 0.00025, decimals: 5 },
+  { symbol: 'USDCAD', displayName: 'USD / CAD', type: 'Forex', chartSymbol: 'FX:USDCAD', basePrice: 1.3400, spread: 0.00025, decimals: 5 },
+  { symbol: 'USDCHF', displayName: 'USD / CHF', type: 'Forex', chartSymbol: 'FX:USDCHF', basePrice: 0.9000, spread: 0.00025, decimals: 5 },
+  { symbol: 'NZDUSD', displayName: 'NZD / USD', type: 'Forex', chartSymbol: 'FX:NZDUSD', basePrice: 0.6100, spread: 0.00025, decimals: 5 },
+  { symbol: 'EURGBP', displayName: 'EUR / GBP', type: 'Forex', chartSymbol: 'FX:EURGBP', basePrice: 0.8600, spread: 0.00025, decimals: 5 },
+  { symbol: 'EURJPY', displayName: 'EUR / JPY', type: 'Forex', chartSymbol: 'FX:EURJPY', basePrice: 151.00, spread: 0.02, decimals: 3 },
+  { symbol: 'EURCHF', displayName: 'EUR / CHF', type: 'Forex', chartSymbol: 'FX:EURCHF', basePrice: 0.9800, spread: 0.00025, decimals: 5 },
+  { symbol: 'GBPJPY', displayName: 'GBP / JPY', type: 'Forex', chartSymbol: 'FX:GBPJPY', basePrice: 178.00, spread: 0.02, decimals: 3 },
+  { symbol: 'CADJPY', displayName: 'CAD / JPY', type: 'Forex', chartSymbol: 'FX:CADJPY', basePrice: 118.00, spread: 0.02, decimals: 3 },
+  { symbol: 'AUDJPY', displayName: 'AUD / JPY', type: 'Forex', chartSymbol: 'FX:AUDJPY', basePrice: 103.00, spread: 0.02, decimals: 3 },
+  { symbol: 'AUDNZD', displayName: 'AUD / NZD', type: 'Forex', chartSymbol: 'FX:AUDNZD', basePrice: 1.0800, spread: 0.0003, decimals: 5 },
+  { symbol: 'GBPCHF', displayName: 'GBP / CHF', type: 'Forex', chartSymbol: 'FX:GBPCHF', basePrice: 1.1500, spread: 0.0003, decimals: 5 },
+  { symbol: 'EURAUD', displayName: 'EUR / AUD', type: 'Forex', chartSymbol: 'FX:EURAUD', basePrice: 1.5500, spread: 0.0003, decimals: 5 },
+  { symbol: 'EURCAD', displayName: 'EUR / CAD', type: 'Forex', chartSymbol: 'FX:EURCAD', basePrice: 1.4700, spread: 0.0003, decimals: 5 },
+  { symbol: 'USDSGD', displayName: 'USD / SGD', type: 'Forex', chartSymbol: 'FX:USDSGD', basePrice: 1.3500, spread: 0.0003, decimals: 5 },
   { symbol: 'BTCUSD', displayName: 'BTC / USD', type: 'Crypto', chartSymbol: 'BINANCE:BTCUSDT', basePrice: 60000, spread: 20, decimals: 2 },
   { symbol: 'ETHUSD', displayName: 'ETH / USD', type: 'Crypto', chartSymbol: 'BINANCE:ETHUSDT', basePrice: 3300, spread: 5, decimals: 2 },
+  { symbol: 'BNBUSD', displayName: 'BNB / USD', type: 'Crypto', chartSymbol: 'BINANCE:BNBUSDT', basePrice: 550, spread: 1.5, decimals: 2 },
+  { symbol: 'ADAUSD', displayName: 'ADA / USD', type: 'Crypto', chartSymbol: 'BINANCE:ADAUSDT', basePrice: 0.45, spread: 0.05, decimals: 4 },
+  { symbol: 'SOLUSD', displayName: 'SOL / USD', type: 'Crypto', chartSymbol: 'BINANCE:SOLUSDT', basePrice: 120, spread: 1.0, decimals: 2 },
+  { symbol: 'XRPUSD', displayName: 'XRP / USD', type: 'Crypto', chartSymbol: 'BINANCE:XRPUSDT', basePrice: 0.55, spread: 0.01, decimals: 4 },
+  { symbol: 'DOGEUSD', displayName: 'DOGE / USD', type: 'Crypto', chartSymbol: 'BINANCE:DOGEUSDT', basePrice: 0.09, spread: 0.01, decimals: 5 },
+  { symbol: 'DOTUSD', displayName: 'DOT / USD', type: 'Crypto', chartSymbol: 'BINANCE:DOTUSDT', basePrice: 8.00, spread: 0.15, decimals: 2 },
   { symbol: 'AAPL', displayName: 'Apple Inc.', type: 'Stocks', chartSymbol: 'NASDAQ:AAPL', basePrice: 168.20, spread: 0.12, decimals: 2 },
+  { symbol: 'MSFT', displayName: 'Microsoft Corp.', type: 'Stocks', chartSymbol: 'NASDAQ:MSFT', basePrice: 400.00, spread: 0.15, decimals: 2 },
+  { symbol: 'TSLA', displayName: 'Tesla Inc.', type: 'Stocks', chartSymbol: 'NASDAQ:TSLA', basePrice: 220.00, spread: 0.25, decimals: 2 },
   { symbol: 'XAUUSD', displayName: 'Gold / USD', type: 'Commodities', chartSymbol: 'OANDA:XAUUSD', basePrice: 2300.50, spread: 0.8, decimals: 2 }
 ];
 
@@ -916,26 +939,62 @@ async function fetchJson(url) {
 }
 
 async function getLivePriceSnapshot() {
-  const [frankfurter, crypto, aapl, gold] = await Promise.all([
-    fetchJson('https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY'),
-    fetchJson('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd'),
+  const [frankfurter, crypto, aapl, msft, tsla, gold] = await Promise.all([
+    fetchJson('https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY,AUD,CAD,CHF,NZD,SGD'),
+    fetchJson('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,cardano,solana,ripple,dogecoin,polkadot&vs_currencies=usd'),
     fetchJson('https://query1.finance.yahoo.com/v8/finance/chart/AAPL?interval=1m&range=1d'),
+    fetchJson('https://query1.finance.yahoo.com/v8/finance/chart/MSFT?interval=1m&range=1d'),
+    fetchJson('https://query1.finance.yahoo.com/v8/finance/chart/TSLA?interval=1m&range=1d'),
     fetchJson('https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?interval=1m&range=1d')
   ]);
 
   const prices = {};
 
   if (frankfurter?.rates) {
-    prices.EURUSD = Number((1 / frankfurter.rates.EUR).toFixed(5));
-    prices.GBPUSD = Number((1 / frankfurter.rates.GBP).toFixed(5));
-    prices.USDJPY = Number(frankfurter.rates.JPY.toFixed(3));
+    const usdTo = frankfurter.rates;
+    const eurUsd = 1 / usdTo.EUR;
+    const gbpUsd = 1 / usdTo.GBP;
+    const audUsd = 1 / usdTo.AUD;
+    const nzdUsd = 1 / usdTo.NZD;
+
+    prices.EURUSD = Number(eurUsd.toFixed(5));
+    prices.GBPUSD = Number(gbpUsd.toFixed(5));
+    prices.USDJPY = Number(usdTo.JPY.toFixed(3));
+    prices.AUDUSD = Number(audUsd.toFixed(5));
+    prices.USDCAD = Number(usdTo.CAD.toFixed(5));
+    prices.USDCHF = Number(usdTo.CHF.toFixed(5));
+    prices.NZDUSD = Number(nzdUsd.toFixed(5));
+    prices.USDSGD = Number(usdTo.SGD.toFixed(5));
+
+    prices.EURGBP = Number((eurUsd / gbpUsd).toFixed(5));
+    prices.EURJPY = Number((eurUsd * usdTo.JPY).toFixed(3));
+    prices.EURCHF = Number((eurUsd * usdTo.CHF).toFixed(5));
+    prices.GBPJPY = Number((gbpUsd * usdTo.JPY).toFixed(3));
+    prices.CADJPY = Number((usdTo.CAD * usdTo.JPY).toFixed(3));
+    prices.AUDJPY = Number((audUsd * usdTo.JPY).toFixed(3));
+    prices.AUDNZD = Number((audUsd / nzdUsd).toFixed(5));
+    prices.GBPCHF = Number((gbpUsd * usdTo.CHF).toFixed(5));
+    prices.EURAUD = Number((eurUsd / audUsd).toFixed(5));
+    prices.EURCAD = Number((eurUsd / usdTo.CAD).toFixed(5));
   }
 
   if (crypto?.bitcoin?.usd) prices.BTCUSD = Number(crypto.bitcoin.usd.toFixed(2));
   if (crypto?.ethereum?.usd) prices.ETHUSD = Number(crypto.ethereum.usd.toFixed(2));
+  if (crypto?.binancecoin?.usd) prices.BNBUSD = Number(crypto.binancecoin.usd.toFixed(2));
+  if (crypto?.cardano?.usd) prices.ADAUSD = Number(crypto.cardano.usd.toFixed(4));
+  if (crypto?.solana?.usd) prices.SOLUSD = Number(crypto.solana.usd.toFixed(2));
+  if (crypto?.ripple?.usd) prices.XRPUSD = Number(crypto.ripple.usd.toFixed(4));
+  if (crypto?.dogecoin?.usd) prices.DOGEUSD = Number(crypto.dogecoin.usd.toFixed(5));
+  if (crypto?.polkadot?.usd) prices.DOTUSD = Number(crypto.polkadot.usd.toFixed(2));
 
   const aaplPrice = aapl?.chart?.result?.[0]?.meta?.regularMarketPrice;
   if (typeof aaplPrice === 'number') prices.AAPL = Number(aaplPrice.toFixed(2));
+
+  const msftPrice = msft?.chart?.result?.[0]?.meta?.regularMarketPrice;
+  if (typeof msftPrice === 'number') prices.MSFT = Number(msftPrice.toFixed(2));
+
+  const tslaPrice = tsla?.chart?.result?.[0]?.meta?.regularMarketPrice;
+  if (typeof tslaPrice === 'number') prices.TSLA = Number(tslaPrice.toFixed(2));
 
   const goldPrice = gold?.chart?.result?.[0]?.meta?.regularMarketPrice;
   if (typeof goldPrice === 'number') prices.XAUUSD = Number(goldPrice.toFixed(2));

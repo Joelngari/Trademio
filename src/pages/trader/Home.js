@@ -331,7 +331,7 @@ export default function TraderHome() {
               <span className="text-xs uppercase tracking-widest text-gray-500">Live quotes</span>
             </div>
             <div className="space-y-3">
-              {marketData.slice(0, 5).map((item) => (
+              {marketData.slice(0, 10).map((item) => (
                 <div key={item.symbol} className="flex items-center justify-between p-4 rounded bg-white/5 border border-white/10">
                   <div>
                     <p className="text-sm text-gray-400">{item.displayName}</p>
@@ -462,7 +462,12 @@ function TradingViewMarketOverview() {
           symbols: [
             { s: 'BINANCE:BTCUSDT', d: 'Bitcoin' },
             { s: 'BINANCE:ETHUSDT', d: 'Ethereum' },
-            { s: 'BINANCE:SOLUSDT', d: 'Solana' }
+            { s: 'BINANCE:BNBUSDT', d: 'BNB' },
+            { s: 'BINANCE:ADAUSDT', d: 'Cardano' },
+            { s: 'BINANCE:SOLUSDT', d: 'Solana' },
+            { s: 'BINANCE:XRPUSDT', d: 'XRP' },
+            { s: 'BINANCE:DOGEUSDT', d: 'Dogecoin' },
+            { s: 'BINANCE:DOTUSDT', d: 'Polkadot' }
           ]
         },
         {
@@ -470,7 +475,29 @@ function TradingViewMarketOverview() {
           symbols: [
             { s: 'FX:EURUSD' },
             { s: 'FX:GBPUSD' },
-            { s: 'FX:USDJPY' }
+            { s: 'FX:USDJPY' },
+            { s: 'FX:AUDUSD' },
+            { s: 'FX:EURGBP' },
+            { s: 'FX:EURJPY' },
+            { s: 'FX:USDCHF' },
+            { s: 'FX:USDCAD' },
+            { s: 'FX:NZDUSD' },
+            { s: 'FX:EURCHF' },
+            { s: 'FX:GBPJPY' }
+          ]
+        },
+        {
+          title: 'Stocks',
+          symbols: [
+            { s: 'NASDAQ:AAPL', d: 'Apple' },
+            { s: 'NASDAQ:MSFT', d: 'Microsoft' },
+            { s: 'NASDAQ:TSLA', d: 'Tesla' }
+          ]
+        },
+        {
+          title: 'Commodities',
+          symbols: [
+            { s: 'OANDA:XAUUSD', d: 'Gold' }
           ]
         }
       ]
