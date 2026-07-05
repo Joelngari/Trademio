@@ -210,14 +210,31 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     }
 
     // Handle referral
+    const settingsDoc = await adminDb.collection('settings').doc('platform').get();
+    const adminReferralCode = settingsDoc.exists
+      ? (settingsDoc.data()?.adminReferralCode || process.env.ADMIN_REFERRAL_CODE || 'VELNIX-ADMIN')
+      : (process.env.ADMIN_REFERRAL_CODE || 'VELNIX-ADMIN');
+
     let marketerId = 'ADMIN';
     const referralCode = data.referralCode && data.referralCode !== 'undefined' ? data.referralCode : null;
     if (referralCode) {
-      const marketerQuery = await adminDb.collection('marketers').where('referralCode', '==', referralCode).get();
+      const marketerQuery = await adminDb.collection('users')
+        .where('role', '==', 'marketer')
+        .where('referralCode', '==', referralCode)
+        .get();
+
       if (!marketerQuery.empty) {
         marketerId = marketerQuery.docs[0].id;
-      } else if (referralCode === process.env.ADMIN_REFERRAL_CODE) {
-        marketerId = 'ADMIN';
+      } else {
+        const legacyMarketerQuery = await adminDb.collection('marketers')
+          .where('referralCode', '==', referralCode)
+          .get();
+
+        if (!legacyMarketerQuery.empty) {
+          marketerId = legacyMarketerQuery.docs[0].id;
+        } else if (referralCode === adminReferralCode) {
+          marketerId = 'ADMIN';
+        }
       }
     }
 
@@ -1470,6 +1487,7 @@ app.post('/api/admin/marketer', authMiddleware, roleMiddleware(['admin']), async
     const marketerRef = adminDb.collection('marketers').doc(userRecord.uid);
     batch.set(marketerRef, {
       uid: userRecord.uid,
+      referralCode: referralCode,
       commissionBalance: 0,
       totalEarned: 0,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -1788,6 +1806,7 @@ app.post('/api/admin/promote-to-marketer/:id', authMiddleware, roleMiddleware(['
     // Create marketers collection document (commissions only)
     await adminDb.collection('marketers').doc(id).set({
       uid: id,
+      referralCode: referralCode,
       commissionBalance: 0,
       totalEarned: 0,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
