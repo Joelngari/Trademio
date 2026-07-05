@@ -273,6 +273,10 @@ export default function AdminMarketers() {
                       <span className="text-white font-medium">{selectedMarketer.email}</span>
                     </div>
                     <div className="flex justify-between text-sm border-t border-white/5 pt-3">
+                      <span className="text-gray-500">UID:</span>
+                      <span className="text-white font-medium break-all">{selectedMarketer.uid || selectedMarketer.id || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between text-sm border-t border-white/5 pt-3">
                       <span className="text-gray-500">Status:</span>
                       <span className={`font-bold ${selectedMarketer.status === 'active' ? 'text-green-400' : 'text-red-400'}`}>
                         {selectedMarketer.status}
