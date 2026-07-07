@@ -2163,44 +2163,44 @@ async function seedDatabase() {
 
       // Withdrawal + Verification packages (one-per-family, no tiers)
       { type: 'withdrawal-bot', name: 'TITAN FOREX WITHDRAWAL BOT', price: 2000, maxAmount: 20000, botFamily: 'TITAN FOREX' },
-      { type: 'verification-bot', name: 'TITAN FOREX VERIFICATION BOT', price: 1000, botFamily: 'TITAN FOREX' },
+      { type: 'verification-bot', name: 'TITAN FOREX VERIFICATION BOT', price: 5500, botFamily: 'TITAN FOREX' },
 
       { type: 'withdrawal-bot', name: 'ASTRO WITHDRAWAL BOT', price: 1800, maxAmount: 15000, botFamily: 'ASTRO' },
-      { type: 'verification-bot', name: 'ASTRO VERIFICATION BOT', price: 900, botFamily: 'ASTRO' },
+      { type: 'verification-bot', name: 'ASTRO VERIFICATION BOT', price: 5000, botFamily: 'ASTRO' },
 
       { type: 'withdrawal-bot', name: 'SYNAPSE WITHDRAWAL BOT', price: 2500, maxAmount: 30000, botFamily: 'SYNAPSE' },
-      { type: 'verification-bot', name: 'SYNAPSE VERIFICATION BOT', price: 1200, botFamily: 'SYNAPSE' },
+      { type: 'verification-bot', name: 'SYNAPSE VERIFICATION BOT', price: 6600, botFamily: 'SYNAPSE' },
 
       { type: 'withdrawal-bot', name: 'GOLDEN WITHDRAWAL BOT', price: 3000, maxAmount: 40000, botFamily: 'GOLDEN' },
-      { type: 'verification-bot', name: 'GOLDEN VERIFICATION BOT', price: 1500, botFamily: 'GOLDEN' },
+      { type: 'verification-bot', name: 'GOLDEN VERIFICATION BOT', price: 8300, botFamily: 'GOLDEN' },
       { type: 'withdrawal-bot', name: 'PHOENIX WITHDRAWAL BOT', price: 2000, maxAmount: 40000, botFamily: 'PHOENIX' },
-      { type: 'verification-bot', name: 'PHOENIX VERIFICATION BOT', price: 1000, botFamily: 'PHOENIX' },
+      { type: 'verification-bot', name: 'PHOENIX VERIFICATION BOT', price: 5500, botFamily: 'PHOENIX' },
       { type: 'withdrawal-bot', name: 'ORACLE WITHDRAWAL BOT', price: 2250, maxAmount: 45000, botFamily: 'ORACLE' },
-      { type: 'verification-bot', name: 'ORACLE VERIFICATION BOT', price: 1125, botFamily: 'ORACLE' },
+      { type: 'verification-bot', name: 'ORACLE VERIFICATION BOT', price: 6200, botFamily: 'ORACLE' },
 
       { type: 'withdrawal-bot', name: 'FLUX WITHDRAWAL BOT', price: 4000, maxAmount: 80000, botFamily: 'FLUX' },
-      { type: 'verification-bot', name: 'FLUX VERIFICATION BOT', price: 1800, botFamily: 'FLUX' },
+      { type: 'verification-bot', name: 'FLUX VERIFICATION BOT', price: 10000, botFamily: 'FLUX' },
 
       { type: 'withdrawal-bot', name: 'VEXO WITHDRAWAL BOT', price: 4500, maxAmount: 120000, botFamily: 'VEXO' },
-      { type: 'verification-bot', name: 'VEXO VERIFICATION BOT', price: 2000, botFamily: 'VEXO' },
+      { type: 'verification-bot', name: 'VEXO VERIFICATION BOT', price: 11000, botFamily: 'VEXO' },
 
       { type: 'withdrawal-bot', name: 'QUANTUM WITHDRAWAL BOT', price: 5000, maxAmount: null, botFamily: 'QUANTUM' },
-      { type: 'verification-bot', name: 'QUANTUM VERIFICATION BOT', price: 2500, botFamily: 'QUANTUM' },
+      { type: 'verification-bot', name: 'QUANTUM VERIFICATION BOT', price: 13800, botFamily: 'QUANTUM' },
 
       { type: 'withdrawal-bot', name: 'BLOCK WITHDRAWAL BOT', price: 1800, maxAmount: 20000, botFamily: 'BLOCK' },
-      { type: 'verification-bot', name: 'BLOCK VERIFICATION BOT', price: 900, botFamily: 'BLOCK' },
+      { type: 'verification-bot', name: 'BLOCK VERIFICATION BOT', price: 5000, botFamily: 'BLOCK' },
 
       { type: 'withdrawal-bot', name: 'PULSE WITHDRAWAL BOT', price: 2000, maxAmount: 30000, botFamily: 'PULSE' },
-      { type: 'verification-bot', name: 'PULSE VERIFICATION BOT', price: 1000, botFamily: 'PULSE' },
+      { type: 'verification-bot', name: 'PULSE VERIFICATION BOT', price: 5500, botFamily: 'PULSE' },
 
       { type: 'withdrawal-bot', name: 'QUARRY WITHDRAWAL BOT', price: 2200, maxAmount: 40000, botFamily: 'QUARRY' },
-      { type: 'verification-bot', name: 'QUARRY VERIFICATION BOT', price: 1100, botFamily: 'QUARRY' },
+      { type: 'verification-bot', name: 'QUARRY VERIFICATION BOT', price: 6100, botFamily: 'QUARRY' },
 
       { type: 'withdrawal-bot', name: 'MARGIN WITHDRAWAL BOT', price: 3500, maxAmount: 100000, botFamily: 'MARGIN' },
-      { type: 'verification-bot', name: 'MARGIN VERIFICATION BOT', price: 1600, botFamily: 'MARGIN' },
+      { type: 'verification-bot', name: 'MARGIN VERIFICATION BOT', price: 8900, botFamily: 'MARGIN' },
 
       { type: 'withdrawal-bot', name: 'NEXA WITHDRAWAL BOT', price: 4500, maxAmount: 500000, botFamily: 'NEXA' },
-      { type: 'verification-bot', name: 'NEXA VERIFICATION BOT', price: 2200, botFamily: 'NEXA' }
+      { type: 'verification-bot', name: 'NEXA VERIFICATION BOT', price: 12200, botFamily: 'NEXA' }
     ];
 
     const batch = adminDb.batch();
