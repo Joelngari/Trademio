@@ -15,6 +15,8 @@ export default function AdminTraders() {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editFormData, setEditFormData] = useState({});
+  const [syncingBalances, setSyncingBalances] = useState(false);
+  const [syncMessage, setSyncMessage] = useState(null);
 
   useEffect(() => {
     const q = query(collection(db, 'users'), where('role', '==', 'trader'), orderBy('createdAt', 'desc'));
@@ -108,6 +110,31 @@ export default function AdminTraders() {
     }
   };
 
+  const handleSyncBalances = async () => {
+    setSyncingBalances(true);
+    setSyncMessage(null);
+
+    try {
+      const token = await auth.currentUser.getIdToken();
+      const res = await fetch('/api/admin/sync-trader-balances', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Sync failed');
+
+      setSyncMessage(`Balances synced for ${data.syncedCount} traders.`);
+    } catch (err) {
+      setSyncMessage(`Sync failed: ${err.message}`);
+    } finally {
+      setSyncingBalances(false);
+    }
+  };
+
   const handlePromoteToMarketer = async (trader) => {
     if (!trader) return;
     
@@ -152,16 +179,32 @@ export default function AdminTraders() {
            <h1 className="text-3xl font-bold text-white mb-2">Traders Management</h1>
            <p className="text-gray-400">Manage {traders.length} active platform traders.</p>
         </div>
-        <div className="relative group">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+        <div className="relative group w-full sm:w-auto">
            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
            <input 
             type="text" 
             placeholder="Search traders..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="bg-[#121212] border border-white/5 rounded pl-12 pr-6 py-3 text-white placeholder:text-gray-600 focus:border-[#87ceeb] outline-none transition-all w-full md:w-80"
+            className="bg-[#121212] border border-white/5 rounded pl-12 pr-6 py-3 text-white placeholder:text-gray-600 focus:border-[#87ceeb] outline-none transition-all w-full sm:w-80"
            />
         </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+          <button
+            onClick={handleSyncBalances}
+            disabled={syncingBalances}
+            className="px-4 py-3 rounded bg-[#87ceeb] text-[#0a0a0a] font-bold hover:bg-[#76b9d6] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {syncingBalances ? 'Syncing balances...' : 'Sync trader balances'}
+          </button>
+          {syncMessage && (
+            <div className="text-sm text-gray-300 text-left sm:text-right">
+              {syncMessage}
+            </div>
+          )}
+        </div>
+      </div>
       </div>
 
       <div className="bg-[#121212] border border-white/5 rounded overflow-hidden">

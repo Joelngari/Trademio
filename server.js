@@ -374,83 +374,43 @@ async function activateBotPurchase(traderRef, pkg, botPurchaseRef, marketerId, t
 
 app.post('/api/payments/stk-push', authMiddleware, paymentLimiter, async (req, res) => {
   try {
-    const { packageId, phoneNumber, amount: requestedAmount, botPurchaseId } = req.body;
+    const { packageId, phoneNumber, amount: requestedAmount } = req.body;
     
     let amount;
     let description;
     let type;
     let metadata = {};
-    let botPurchaseRef = null;
+    let isBotType = false;
+    let useDepositBalance = false;
 
     if (packageId) {
       const pkg = await adminDb.collection('packages').doc(packageId).get();
       if (!pkg.exists) return res.status(404).json({ message: 'Package not found' });
       const pkgData = pkg.data();
       
-      // Check if partial payment: requestedAmount < package price
-      if (requestedAmount && requestedAmount > 0 && requestedAmount < pkgData.price) {
-        const normalizedType = String(pkgData.type || '').toLowerCase();
-        const normalizedName = String(pkgData.name || '').toLowerCase();
-        const botTypes = ['withdrawal-bot', 'verification-bot', 'forex', 'crypto', 'mining', 'investment', 'lifespan'];
-        const isPartialBot = botTypes.includes(normalizedType)
-          || normalizedType.includes('verification')
-          || normalizedType.includes('withdrawal')
-          || normalizedName.includes('verification bot')
-          || normalizedName.includes('withdrawal bot');
-
-        // Partial payment for a bot
-        if (isPartialBot) {
-          amount = requestedAmount;
-          
-          // If botPurchaseId provided, validate and link to existing botPurchase (resuming payment)
-          if (botPurchaseId) {
-            const candidateRef = adminDb.collection('botPurchases').doc(botPurchaseId);
-            const candidateDoc = await candidateRef.get();
-            if (!candidateDoc.exists) {
-              return res.status(400).json({ message: 'Invalid botPurchaseId' });
-            }
-            const candidateData = candidateDoc.data();
-            if (candidateData.status !== 'pending') {
-              return res.status(400).json({ message: 'Bot purchase is not pending' });
-            }
-            botPurchaseRef = candidateRef;
-          } else {
-            // Try to find an existing pending botPurchase for this trader+package to avoid duplicates
-            const existingSnap = await adminDb.collection('botPurchases')
-              .where('traderId', '==', req.user.uid)
-              .where('packageId', '==', packageId)
-              .where('status', '==', 'pending')
-              .limit(1)
-              .get();
-
-            if (!existingSnap.empty) {
-              botPurchaseRef = adminDb.collection('botPurchases').doc(existingSnap.docs[0].id);
-            } else {
-              // Create new botPurchase for this partial payment
-              botPurchaseRef = adminDb.collection('botPurchases').doc();
-              await botPurchaseRef.set({
-                id: botPurchaseRef.id,
-                traderId: req.user.uid,
-                packageId: packageId,
-                type: pkgData.type,
-                requiredAmount: pkgData.price,
-                amountPaid: 0,
-                contributors: [],
-                status: 'pending',
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
-              });
-            }
-          }
-          
-          metadata = { packageId, botPurchaseId: botPurchaseRef.id };
-          description = `Partial payment for ${pkgData.name} (${amount}/${pkgData.price})`;
-          type = pkgData.type;
-        } else {
-          return res.status(400).json({ message: 'Partial payments only supported for bots' });
+      // For Option B: bot packages deduct from depositBalance
+      const botTypes = ['withdrawal-bot', 'verification-bot', 'forex', 'crypto', 'mining', 'investment', 'lifespan'];
+      isBotType = botTypes.includes(String(pkgData.type || '').toLowerCase());
+      
+      if (isBotType) {
+        // Bot purchase - check depositBalance
+        const traderDoc = await adminDb.collection('traders').doc(req.user.uid).get();
+        const trader = traderDoc.data() || {};
+        const depositBalance = trader.depositBalance || 0;
+        
+        if (depositBalance < pkgData.price) {
+          return res.status(400).json({ 
+            message: `Insufficient deposit balance. Need KSh ${pkgData.price.toLocaleString()} but have KSh ${depositBalance.toLocaleString()}` 
+          });
         }
+        
+        amount = pkgData.price;
+        description = `Purchase of ${pkgData.name} (from deposit)`;
+        type = pkgData.type;
+        metadata = { packageId };
+        useDepositBalance = true;
       } else {
-        // Full payment or default
+        // Non-bot packages (deposits, etc.)
         amount = requestedAmount || pkgData.price;
         description = `Purchase of ${pkgData.name}`;
         type = pkgData.type;
@@ -469,7 +429,7 @@ app.post('/api/payments/stk-push', authMiddleware, paymentLimiter, async (req, r
 
     // Create pending transaction
     const transactionRef = adminDb.collection('transactions').doc();
-    await transactionRef.set({
+    const transactionData = {
       id: transactionRef.id,
       traderId: req.user.uid,
       marketerId: req.user.marketerId,
@@ -479,9 +439,21 @@ app.post('/api/payments/stk-push', authMiddleware, paymentLimiter, async (req, r
       status: 'pending',
       metadata: metadata,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    };
 
-    console.log('📤 STK push request starting', { phoneNumber, amount, transactionRefId: transactionRef.id, description, botPurchaseId: metadata.botPurchaseId });
+    await transactionRef.set(transactionData);
+
+    if (useDepositBalance) {
+      console.log('💳 Processing bot purchase directly from deposit balance', { amount, transactionRefId: transactionRef.id, description });
+      await handleSuccessfulPayment(transactionRef, transactionData, null);
+      return res.json({
+        message: 'Bot purchase completed using deposit balance.',
+        checkoutRequestId: null,
+        success: true
+      });
+    }
+
+    console.log('📤 STK push request starting', { phoneNumber, amount, transactionRefId: transactionRef.id, description });
     const result = await initiateStkPush(phoneNumber, amount, transactionRef.id, description);
     console.log('📤 STK push initiation completed', { checkoutRequestId: result.CheckoutRequestID, response: result });
     
@@ -490,13 +462,85 @@ app.post('/api/payments/stk-push', authMiddleware, paymentLimiter, async (req, r
 
     res.json({
       message: 'STK push sent. Check your phone.',
-      checkoutRequestId: result.CheckoutRequestID,
-      botPurchaseId: metadata.botPurchaseId
+      checkoutRequestId: result.CheckoutRequestID
     });
   } catch (error) {
     console.error('Payment Error:', error.response?.data || error.message);
     const status = error.response?.status || 500;
     const message = error.response?.data?.errorMessage || error.response?.data?.message || 'Failed to initiate payment';
+    res.status(status).json({ message });
+  }
+});
+
+app.post('/api/payments/bot-purchase', authMiddleware, paymentLimiter, async (req, res) => {
+  try {
+    const { packageId, type, amount: requestedAmount } = req.body;
+    const botTypes = ['withdrawal-bot', 'verification-bot', 'forex', 'crypto', 'mining', 'investment', 'lifespan'];
+
+    let purchaseType = null;
+    let totalAmount = 0;
+    let metadata = {};
+
+    if (packageId) {
+      const pkgDoc = await adminDb.collection('packages').doc(packageId).get();
+      if (!pkgDoc.exists) {
+        return res.status(404).json({ message: 'Package not found' });
+      }
+
+      const pkgData = pkgDoc.data();
+      if (!botTypes.includes(String(pkgData.type || '').toLowerCase())) {
+        return res.status(400).json({ message: 'Package is not eligible for deposit bot purchase' });
+      }
+
+      purchaseType = pkgData.type;
+      totalAmount = pkgData.price;
+      metadata = { packageId };
+    } else if (type === 'investment') {
+      if (!requestedAmount || requestedAmount <= 0) {
+        return res.status(400).json({ message: 'Invalid investment amount' });
+      }
+
+      purchaseType = 'investment';
+      totalAmount = Number(requestedAmount);
+      metadata = { type: 'investment' };
+    } else {
+      return res.status(400).json({ message: 'packageId or investment type is required' });
+    }
+
+    const traderDoc = await adminDb.collection('traders').doc(req.user.uid).get();
+    const trader = traderDoc.data() || {};
+    const depositBalance = trader.depositBalance || 0;
+
+    if (depositBalance < totalAmount) {
+      return res.status(400).json({
+        message: `Insufficient deposit balance. Need KSh ${totalAmount.toLocaleString()} but have KSh ${depositBalance.toLocaleString()}`
+      });
+    }
+
+    const transactionRef = adminDb.collection('transactions').doc();
+    const transactionData = {
+      id: transactionRef.id,
+      traderId: req.user.uid,
+      marketerId: req.user.marketerId,
+      totalAmount,
+      type: purchaseType,
+      phoneNumber: null,
+      status: 'pending',
+      metadata,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    await transactionRef.set(transactionData);
+    await handleSuccessfulPayment(transactionRef, transactionData, null);
+
+    res.json({
+      message: 'Bot purchase completed using deposit balance.',
+      success: true
+    });
+  } catch (error) {
+    console.error('Bot purchase error:', error.response?.data || error.message);
+    const status = error.response?.status || 500;
+    const message = error.response?.data?.errorMessage || error.response?.data?.message || 'Failed to complete bot purchase';
     res.status(status).json({ message });
   }
 });
@@ -793,6 +837,13 @@ async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) 
     let marketerDoc;
     let pkg;
 
+    const traderRef = adminDb.collection('traders').doc(transData.traderId);
+    let pkgRef;
+    const botPackageTypes = ['forex', 'crypto', 'mining', 'investment', 'lifespan', 'withdrawal-bot', 'verification-bot'];
+    if (botPackageTypes.includes(transData.type)) {
+      pkgRef = adminDb.collection('packages').doc(transData.metadata.packageId);
+    }
+
     if (marketerId !== 'ADMIN') {
       marketerCut = transData.totalAmount * 0.85;
       adminCut = transData.totalAmount * 0.15;
@@ -800,17 +851,29 @@ async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) 
       marketerDoc = await t.get(marketerRef);
     }
 
-    const traderRef = adminDb.collection('traders').doc(transData.traderId);
-    let pkgRef;
-    if (['forex', 'crypto', 'mining', 'investment', 'lifespan', 'withdrawal-bot'].includes(transData.type)) {
-      pkgRef = adminDb.collection('packages').doc(transData.metadata.packageId);
+    const traderSnapshot = await t.get(traderRef);
+    const traderData = traderSnapshot.data() || {};
+
+    if (pkgRef) {
       const pkgDoc = await t.get(pkgRef);
       pkg = pkgDoc.exists ? pkgDoc.data() : {};
     }
 
+    if (!pkg && transData.type === 'investment') {
+      pkg = {
+        id: null,
+        name: 'Custom Investment',
+        type: 'investment',
+        duration: 3,
+        expectedReturn: transData.totalAmount * 0.5,
+        botFamily: 'INVESTMENT',
+        category: 'investment'
+      };
+    }
+
     // 1. Update Transaction
-    t.update(transRef, { 
-      status: 'success', 
+    t.update(transRef, {
+      status: 'success',
       mpesaReceiptNumber,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
@@ -848,49 +911,79 @@ async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) 
         depositBalance: admin.firestore.FieldValue.increment(transData.totalAmount),
         totalDeposited: admin.firestore.FieldValue.increment(transData.totalAmount)
       });
-    } else if (['forex', 'crypto', 'mining', 'investment', 'lifespan'].includes(transData.type)) {
-      let durationMs = (pkg.duration || 60) * 60 * 1000;
-      if (transData.type === 'investment' || transData.type === 'lifespan') {
-         durationMs = (pkg.duration || 1) * 24 * 60 * 60 * 1000;
+    } else if (botPackageTypes.includes(transData.type)) {
+      // Bot purchase: deduct from depositBalance and create session
+      const currentBalance = traderData.depositBalance || 0;
+
+      if (currentBalance < transData.totalAmount) {
+        throw new Error(`Insufficient deposit balance for bot purchase`);
       }
 
-      const sessionRef = adminDb.collection('sessions').doc();
-      const startedAt = Date.now();
-      const endsAt = startedAt + durationMs;
-
-      const rawFamily = String(pkg.botFamily || '').trim();
-      let derivedFamily = rawFamily || String(pkg.name || '').trim().toUpperCase().replace(/\s+(FOREX|CRYPTO|RIG|BOT|INVESTMENT|LIFESPAN)$/i, '').trim();
-      if (derivedFamily === '') derivedFamily = null;
-
-      const sessionData = {
-        id: sessionRef.id,
-        traderId: transData.traderId,
-        marketerId: marketerId,
-        type: transData.type,
-        planName: pkg.name,
-        amountPaid: transData.totalAmount,
-        expectedReturn: pkg.expectedReturn,
-        totalDurationMs: durationMs,
-        startedAt,
-        endsAt,
-        status: 'active',
-        creditedAmount: 0,
-        lastAccruedAt: startedAt,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      };
-
-      t.set(sessionRef, sessionData);
       t.update(traderRef, {
-        activeSessionId: sessionRef.id,
-        lastTradingPackageName: pkg.name || null,
-        lastTradingFamily: derivedFamily,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        depositBalance: admin.firestore.FieldValue.increment(-transData.totalAmount)
       });
-    } else if (transData.type === 'withdrawal-bot') {
-      t.update(traderRef, {
-        withdrawalBotTier: pkg.tier,
-        withdrawalBotMaxAmount: pkg.maxAmount
-      });
+
+      // Create session for trading bots (not for withdrawal/verification bots)
+      if (['forex', 'crypto', 'mining', 'investment', 'lifespan'].includes(transData.type)) {
+        let durationMs = (pkg.duration || 60) * 60 * 1000;
+        if (transData.type === 'investment' || transData.type === 'lifespan') {
+          durationMs = (pkg.duration || 1) * 24 * 60 * 60 * 1000;
+        }
+
+        const sessionRef = adminDb.collection('sessions').doc();
+        const startedAt = Date.now();
+        const endsAt = startedAt + durationMs;
+
+        const rawFamily = String(pkg.botFamily || '').trim();
+        let derivedFamily = rawFamily || String(pkg.name || '').trim().toUpperCase().replace(/\s+(FOREX|CRYPTO|RIG|BOT|INVESTMENT|LIFESPAN)$/i, '').trim();
+        if (derivedFamily === '') derivedFamily = null;
+
+        const sessionData = {
+          id: sessionRef.id,
+          traderId: transData.traderId,
+          marketerId: marketerId,
+          type: transData.type,
+          planName: pkg.name,
+          amountPaid: transData.totalAmount,
+          expectedReturn: pkg.expectedReturn,
+          totalDurationMs: durationMs,
+          startedAt,
+          endsAt,
+          status: 'active',
+          creditedAmount: 0,
+          lastAccruedAt: startedAt,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        t.set(sessionRef, sessionData);
+        t.update(traderRef, {
+          activeSessionId: sessionRef.id,
+          lastTradingPackageName: pkg.name || null,
+          lastTradingFamily: derivedFamily,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } else if (transData.type === 'withdrawal-bot') {
+        // Withdrawal bot: update trader with active withdrawal path metadata
+        t.update(traderRef, {
+          withdrawalBotPackageId: pkg.id,
+          withdrawalBotPackageName: pkg.name,
+          withdrawalBotFamily: pkg.botFamily || null,
+          withdrawalBotCategory: pkg.category || null,
+          withdrawalBotMaxAmount: pkg.maxAmount || null,
+          withdrawalBotTier: 'active',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } else if (transData.type === 'verification-bot') {
+        // Verification bot: activate verification path
+        t.update(traderRef, {
+          verificationBotPackageId: pkg.id,
+          verificationBotPackageName: pkg.name,
+          verificationBotFamily: pkg.botFamily || null,
+          verificationBotCategory: pkg.category || null,
+          verificationBotTier: 'active',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
     }
 
     invalidateCache('traders', 'marketers', 'transactions', 'commissions', 'sessions');
@@ -1707,12 +1800,22 @@ app.get('/api/admin/marketer/:id', authMiddleware, roleMiddleware(['admin']), as
 app.get('/api/admin/trader/:id', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
   try {
     const { id } = req.params;
-    const traderDoc = await adminDb.collection('users').doc(id).get();
-    if (!traderDoc.exists || traderDoc.data().role !== 'trader') {
+    const userDoc = await adminDb.collection('users').doc(id).get();
+    if (!userDoc.exists || userDoc.data().role !== 'trader') {
       return res.status(404).json({ message: 'Trader not found' });
     }
 
-    const trader = { id: traderDoc.id, ...traderDoc.data() };
+    const traderDoc = await adminDb.collection('traders').doc(id).get();
+    const userData = userDoc.data();
+    const traderData = traderDoc.exists ? traderDoc.data() : {};
+
+    const trader = {
+      id: userDoc.id,
+      ...userData,
+      ...traderData,
+      tradingBalance: traderData.tradingBalance ?? userData.tradingBalance ?? 0,
+      depositBalance: traderData.depositBalance ?? userData.depositBalance ?? 0
+    };
 
     // Get marketer info if exists
     let marketerName = 'No marketer';
@@ -1775,6 +1878,63 @@ app.put('/api/admin/trader/:id', authMiddleware, roleMiddleware(['admin']), asyn
   } catch (error) {
     console.error('Update trader error:', error);
     res.status(400).json({ message: error.message });
+  }
+});
+
+// Sync trader balances from traders collection into users collection (admin only)
+app.post('/api/admin/sync-trader-balances', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const traderSnapshot = await adminDb.collection('traders').get();
+    const userSnapshot = await adminDb.collection('users').where('role', '==', 'trader').get();
+    const userIds = new Set(userSnapshot.docs.map(doc => doc.id));
+
+    let batch = adminDb.batch();
+    let updates = 0;
+    let committed = 0;
+
+    for (const traderDoc of traderSnapshot.docs) {
+      if (!userIds.has(traderDoc.id)) continue;
+      const traderData = traderDoc.data();
+      const updatePayload = {};
+
+      if (traderData.tradingBalance !== undefined) {
+        updatePayload.tradingBalance = traderData.tradingBalance;
+      }
+      if (traderData.depositBalance !== undefined) {
+        updatePayload.depositBalance = traderData.depositBalance;
+      }
+
+      if (Object.keys(updatePayload).length === 0) continue;
+
+      batch.update(adminDb.collection('users').doc(traderDoc.id), {
+        ...updatePayload,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      updates += 1;
+
+      if (updates % 450 === 0) {
+        await batch.commit();
+        committed += 1;
+        batch = adminDb.batch();
+      }
+    }
+
+    if (updates % 450 !== 0) {
+      await batch.commit();
+      committed += 1;
+    }
+
+    invalidateCache('users', 'traders');
+    res.json({
+      message: 'Trader balances synchronized successfully',
+      syncedCount: updates,
+      traderCount: traderSnapshot.size,
+      userCount: userSnapshot.size,
+      batchCommits: committed
+    });
+  } catch (error) {
+    console.error('Sync trader balances error:', error);
+    res.status(500).json({ message: 'Failed to sync trader balances', error: error.message });
   }
 });
 

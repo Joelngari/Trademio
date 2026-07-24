@@ -1,7 +1,10 @@
 import { paymentApi } from '../services/api.js';
 
 export function watchPaymentStatus(checkoutRequestId, onStatus) {
-  if (!checkoutRequestId) return () => {};
+  if (!checkoutRequestId) {
+    onStatus?.('success');
+    return () => {};
+  }
 
   let stopped = false;
   let intervalId = null;

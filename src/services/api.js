@@ -41,6 +41,7 @@ export const authApi = {
 
 export const paymentApi = {
   initiateStkPush: (data) => api.post('/payments/stk-push', data),
+  purchaseBotWithDeposit: (data) => api.post('/payments/bot-purchase', data),
   getPaymentStatus: (checkoutRequestId) => api.get(`/payments/status/${checkoutRequestId}`),
 };
 

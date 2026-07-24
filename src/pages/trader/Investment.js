@@ -1,18 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api, { traderApi, paymentApi } from '../../services/api.js';
 import { watchPaymentStatus } from '../../lib/paymentStatus.js';
 import { formatCurrency } from '../../lib/currency.js';
 import { useAuth } from '../../lib/AuthContext.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
-import { PieChart, AlertCircle, Loader2, Info, Clock } from 'lucide-react';
+import { PiggyBank, AlertCircle, Loader2, TrendingUp, ArrowUpCircle, PieChart, Info } from 'lucide-react';
 
 export default function Investment() {
+  const navigate = useNavigate();
   const { profile } = useAuth();
+  const [packages, setPackages] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
   const [botPurchases, setBotPurchases] = useState([]);
+  const [depositBalance, setDepositBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [amount, setAmount] = useState(1000);
-  const [phone, setPhone] = useState(profile?.phoneNumber || '');
   const [purchasing, setPurchasing] = useState(false);
   const [message, setMessage] = useState(null);
   const paymentWatchRef = useRef(null);
@@ -33,6 +36,7 @@ export default function Investment() {
       try {
         const response = await traderApi.getDashboard();
         setActiveSession(response.data.activeSession);
+        setDepositBalance(response.data.trader?.depositBalance || 0);
         await fetchPendingPurchases();
       } catch (err) {
         console.error(err);
@@ -46,24 +50,22 @@ export default function Investment() {
 
   const handleInvestment = async () => {
     if (activeSession || amount < 1000) return;
+    
+    // Check if user has sufficient balance
+    if (depositBalance < amount) {
+      const shortfall = amount - depositBalance;
+      setMessage({ type: 'error', text: `Insufficient balance. Need ${formatCurrency(shortfall, profile?.preferredCurrency)} more to invest this amount.` });
+      return;
+    }
+    
     setPurchasing(true);
     setMessage(null);
     try {
-      const response = await paymentApi.initiateStkPush({ amount, phoneNumber: phone, type: 'investment' });
-      setMessage({ type: 'success', text: 'STK push sent! Complete the payment to activate this investment.' });
-      paymentWatchRef.current?.();
-      paymentWatchRef.current = watchPaymentStatus(response.data.checkoutRequestId, async (status) => {
-        if (status === 'success') {
-          setMessage({ type: 'success', text: 'Payment completed successfully. Your investment session is now active.' });
-          await fetchPendingPurchases();
-          setTimeout(() => window.location.reload(), 2000);
-        }
-        if (status === 'failed') {
-          setMessage({ type: 'error', text: 'Payment failed or was cancelled. Please try again.' });
-        }
-      });
+      await paymentApi.purchaseBotWithDeposit({ type: 'investment', amount });
+      setMessage({ type: 'success', text: 'Payment processed! Your investment session is now active.' });
+      setTimeout(() => window.location.reload(), 2000);
     } catch (err) {
-      setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to initiate investment' });
+      setMessage({ type: 'error', text: err.userMessage || err.response?.data?.message || 'Failed to complete investment purchase' });
     } finally {
       setPurchasing(false);
     }
@@ -107,16 +109,20 @@ export default function Investment() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-500 uppercase mb-2">M-Pesa Phone Number</label>
-              <input
-                type="text"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded px-4 py-4 text-white focus:border-[#87ceeb] outline-none"
-                placeholder="2547XXXXXXXX"
-              />
-            </div>
+            {depositBalance < amount ? (
+              <div className="space-y-3">
+                <div className="p-3 rounded border border-yellow-500/30 bg-yellow-500/10 text-sm">
+                  <p className="text-yellow-500 font-semibold">Insufficient Balance</p>
+                  <p className="text-yellow-400 text-xs mt-1">Need {formatCurrency(amount - depositBalance, profile?.preferredCurrency)} more</p>
+                </div>
+                <button
+                  onClick={() => navigate('/trader/deposit')}
+                  className="w-full py-4 rounded bg-[#87ceeb] text-[#0a0a0a] font-bold hover:bg-[#76b9d6] transition-all flex items-center justify-center gap-2"
+                >
+                  <ArrowUpCircle size={18} /> Deposit Funds
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {message && (
