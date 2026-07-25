@@ -19,7 +19,7 @@ console.log('Server startup:', {
   NODE_ENV: process.env.NODE_ENV,
   isDevLifecycle,
 });
-import { getCollection, getCollections, invalidateCache } from './src/lib/dbCache.js';
+import { getCollection, getCollections, getCachedData, invalidateCache } from './src/lib/dbCache.js';
 import { initiateStkPush, initiateB2C } from './src/lib/daraja.js';
 import { verifyCallbackSignature, validateTimestamp, isCallbackProcessed, markCallbackProcessed } from './src/lib/paymentSecurity.js';
 import { 
@@ -184,6 +184,14 @@ app.get('/api/debug-env', (req, res) => {
     databaseId: process.env.FIREBASE_DATABASE_ID || '(default)',
     firestoreInitialized: !!adminDb
   });
+});
+
+app.get('/api/debug/cache-stats', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    res.json(getCacheStats());
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch cache stats' });
+  }
 });
 
 app.get('/api/health-check', async (req, res) => {
@@ -367,7 +375,7 @@ async function activateBotPurchase(traderRef, pkg, botPurchaseRef, marketerId, t
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   });
 
-  invalidateCache('traders', 'sessions', 'botPurchases');
+  invalidateCache('traders', 'sessions');
 }
 
 // --- PAYMENT ROUTES ---
@@ -435,6 +443,7 @@ app.post('/api/payments/stk-push', authMiddleware, paymentLimiter, async (req, r
       marketerId: req.user.marketerId,
       totalAmount: amount,
       type: type,
+      paymentMethod: useDepositBalance ? 'depositBalance' : 'stk',
       phoneNumber: phoneNumber || null,
       status: 'pending',
       metadata: metadata,
@@ -524,6 +533,7 @@ app.post('/api/payments/bot-purchase', authMiddleware, paymentLimiter, async (re
       marketerId: req.user.marketerId,
       totalAmount,
       type: purchaseType,
+      paymentMethod: 'depositBalance',
       phoneNumber: null,
       status: 'pending',
       metadata,
@@ -671,52 +681,23 @@ app.post('/api/payments/callback', async (req, res) => {
       const mpesaReceiptNumber = items.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
       console.log('✅ STK callback success, updating transaction', { checkoutRequestId, mpesaReceiptNumber });
 
-      // Check if this transaction is for a botPurchase (partial or full bot payment)
-      if (transData.metadata?.botPurchaseId) {
-        const splitResult = await handleBotPurchasePayment(transactionDoc.ref, transData, mpesaReceiptNumber);
-        await markCallbackProcessed(adminDb, checkoutRequestId);
+      // Regular (full) purchase or deposit
+      const splitResult = await handleSuccessfulPayment(transactionDoc.ref, transData, mpesaReceiptNumber);
+      await markCallbackProcessed(adminDb, checkoutRequestId);
 
-        try {
-          const traderDoc = await adminDb.collection('traders').doc(transData.traderId).get();
-          const botPurchaseDoc = await adminDb.collection('botPurchases').doc(transData.metadata.botPurchaseId).get();
-          const botPurchaseData = botPurchaseDoc.data();
-          
-          let emailSubject = 'Payment received';
-          if (botPurchaseData?.status === 'paid') {
-            emailSubject = `${botPurchaseData.type === 'withdrawal-bot' ? 'Withdrawal Bot' : 'Bot'} Purchase Activated`;
-          }
-          
-          await sendSuccessfulPaymentEmail({
-            ...transData,
-            id: transactionDoc.id,
-            mpesaReceiptNumber,
-            phoneNumber: transData.phoneNumber || null,
-            subject: emailSubject
-          }, traderDoc.data());
-        } catch (emailError) {
-          console.error('Notification email error:', emailError);
-        }
-
-        res.status(200).json(splitResult);
-      } else {
-        // Regular (full) purchase or deposit
-        const splitResult = await handleSuccessfulPayment(transactionDoc.ref, transData, mpesaReceiptNumber);
-        await markCallbackProcessed(adminDb, checkoutRequestId);
-
-        try {
-          const traderDoc = await adminDb.collection('traders').doc(transData.traderId).get();
-          await sendSuccessfulPaymentEmail({
-            ...transData,
-            id: transactionDoc.id,
-            mpesaReceiptNumber,
-            phoneNumber: transData.phoneNumber || null
-          }, traderDoc.data());
-        } catch (emailError) {
-          console.error('Notification email error:', emailError);
-        }
-
-        res.status(200).json(splitResult);
+      try {
+        const traderDoc = await adminDb.collection('traders').doc(transData.traderId).get();
+        await sendSuccessfulPaymentEmail({
+          ...transData,
+          id: transactionDoc.id,
+          mpesaReceiptNumber,
+          phoneNumber: transData.phoneNumber || null
+        }, traderDoc.data());
+      } catch (emailError) {
+        console.error('Notification email error:', emailError);
       }
+
+      res.status(200).json(splitResult);
     } else {
       console.warn('⚠️  STK callback failure result code', { checkoutRequestId, resultCode, resultDesc: stkCallback.ResultDesc });
       await transactionDoc.ref.update({ status: 'failed', failureReason: stkCallback.ResultDesc });
@@ -729,108 +710,12 @@ app.post('/api/payments/callback', async (req, res) => {
   }
 });
 
-// Handle bot purchase payment (partial or full via STK callback)
-async function handleBotPurchasePayment(transRef, transData, mpesaReceiptNumber) {
-  return await adminDb.runTransaction(async (t) => {
-    const marketerId = transData.marketerId;
-    const botPurchaseId = transData.metadata.botPurchaseId;
-    const packageId = transData.metadata.packageId;
-    
-    let marketerCut = 0;
-    let adminCut = transData.totalAmount;
-    let marketerRef;
-    let marketerDoc;
-
-    if (marketerId !== 'ADMIN') {
-      marketerCut = transData.totalAmount * 0.85;
-      adminCut = transData.totalAmount * 0.15;
-      marketerRef = adminDb.collection('marketers').doc(marketerId);
-      marketerDoc = await t.get(marketerRef);
-    }
-
-    // Get bot purchase and package details
-    const botPurchaseRef = adminDb.collection('botPurchases').doc(botPurchaseId);
-    const botPurchaseDoc = await t.get(botPurchaseRef);
-    if (!botPurchaseDoc.exists) {
-      throw new Error('Bot purchase not found');
-    }
-    const botPurchaseData = botPurchaseDoc.data();
-
-    const pkgRef = adminDb.collection('packages').doc(packageId);
-    const pkgDoc = await t.get(pkgRef);
-    if (!pkgDoc.exists) {
-      throw new Error('Package not found');
-    }
-    const pkg = pkgDoc.data();
-
-    const traderRef = adminDb.collection('traders').doc(transData.traderId);
-
-    // 1. Update transaction status
-    t.update(transRef, {
-      status: 'success',
-      mpesaReceiptNumber,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // 2. Update marketer commission (if not admin)
-    if (marketerId !== 'ADMIN') {
-      if (!marketerDoc.exists) {
-        t.set(marketerRef, {
-          uid: marketerId,
-          commissionBalance: marketerCut,
-          totalEarned: marketerCut,
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-      } else {
-        t.update(marketerRef, {
-          commissionBalance: admin.firestore.FieldValue.increment(marketerCut),
-          totalEarned: admin.firestore.FieldValue.increment(marketerCut)
-        });
-      }
-
-      const commissionRef = adminDb.collection('commissions').doc();
-      t.set(commissionRef, {
-        id: commissionRef.id,
-        marketerId,
-        traderId: transData.traderId,
-        depositAmount: transData.totalAmount,
-        commissionAmount: marketerCut,
-        adminAmount: adminCut,
-        type: transData.type,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-    }
-
-    // 3. Increment botPurchase.amountPaid and add contributor
-    const newAmountPaid = botPurchaseData.amountPaid + transData.totalAmount;
-    const contributors = botPurchaseData.contributors || [];
-    contributors.push({
-      actor: 'trader',
-      amount: transData.totalAmount,
-      txnId: transRef.id,
-      createdAt: admin.firestore.Timestamp.fromDate(new Date())
-    });
-
-    t.update(botPurchaseRef, {
-      amountPaid: newAmountPaid,
-      contributors: contributors,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // 4. Check if fully paid and activate
-    if (newAmountPaid >= botPurchaseData.requiredAmount) {
-      // Bot purchase is fully funded!
-      await activateBotPurchase(traderRef, pkg, botPurchaseRef, marketerId, t, transRef.id);
-    }
-
-    invalidateCache('traders', 'marketers', 'transactions', 'commissions', 'sessions', 'botPurchases');
-    return { success: true, message: newAmountPaid >= botPurchaseData.requiredAmount ? 'Bot activated!' : 'Payment recorded' };
-  });
-}
+// bot purchase payment handler removed
 
 async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) {
   return await adminDb.runTransaction(async (t) => {
     const marketerId = transData.marketerId;
+    const paymentMethod = transData.paymentMethod || (transData.phoneNumber ? 'stk' : 'depositBalance');
     let marketerCut = 0;
     let adminCut = transData.totalAmount;
     let marketerRef;
@@ -844,7 +729,7 @@ async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) 
       pkgRef = adminDb.collection('packages').doc(transData.metadata.packageId);
     }
 
-    if (marketerId !== 'ADMIN') {
+    if (marketerId !== 'ADMIN' && transData.paymentMethod === 'stk') {
       marketerCut = transData.totalAmount * 0.85;
       adminCut = transData.totalAmount * 0.15;
       marketerRef = adminDb.collection('marketers').doc(marketerId);
@@ -878,7 +763,7 @@ async function handleSuccessfulPayment(transRef, transData, mpesaReceiptNumber) 
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    if (marketerId !== 'ADMIN') {
+    if (marketerId !== 'ADMIN' && transData.paymentMethod === 'stk') {
       if (!marketerDoc.exists) {
         t.set(marketerRef, {
           uid: marketerId,
@@ -1235,7 +1120,7 @@ async function getTraderDashboardData(uid) {
 
 app.get('/api/trader/dashboard', authMiddleware, async (req, res) => {
   try {
-    const dashboard = await getTraderDashboardData(req.user.uid);
+    const dashboard = await getCachedData('trader', `dashboard:${req.user.uid}`, async () => getTraderDashboardData(req.user.uid), 20 * 1000);
     res.json(dashboard);
   } catch (error) {
     console.error('Trader dashboard error:', error);
@@ -1520,22 +1405,26 @@ app.post('/api/trader/order', authMiddleware, async (req, res) => {
 
 app.get('/api/admin/dashboard', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
    try {
-     const [traders, marketers, sessions, transactions, withdrawals] = await getCollections('traders', 'marketers', 'sessions', 'transactions', 'withdrawals');
-     
-     const totalRevenue = transactions.filter(t => t.status === 'success').reduce((acc, t) => acc + t.totalAmount, 0);
-     const adminCut = totalRevenue * 0.15; // Rough estimate or sum commissions
+     const dashboard = await getCachedData('admin', 'dashboard', async () => {
+       const [traders, marketers, sessions, transactions, withdrawals] = await getCollections('traders', 'marketers', 'sessions', 'transactions', 'withdrawals');
 
-     res.json({
-       stats: {
-         totalRevenue,
-         adminCut,
-         totalMarketers: marketers.length,
-         totalTraders: traders.length,
-         activeSessions: sessions.filter(s => s.status === 'active').length,
-         pendingWithdrawals: withdrawals.filter(w => w.status === 'pending').length
-       },
-       recentTransactions: transactions.slice(0, 10)
-     });
+       const totalRevenue = transactions.filter(t => t.status === 'success').reduce((acc, t) => acc + t.totalAmount, 0);
+       const adminCut = totalRevenue * 0.15; // Rough estimate or sum commissions
+
+       return {
+         stats: {
+           totalRevenue,
+           adminCut,
+           totalMarketers: marketers.length,
+           totalTraders: traders.length,
+           activeSessions: sessions.filter(s => s.status === 'active').length,
+           pendingWithdrawals: withdrawals.filter(w => w.status === 'pending').length
+         },
+         recentTransactions: transactions.slice(0, 10)
+       };
+     }, 30 * 1000);
+
+     res.json(dashboard);
    } catch (error) {
      res.status(500).json({ message: 'Error fetching admin dashboard' });
    }
@@ -1666,27 +1555,29 @@ app.delete('/api/admin/package/:id', authMiddleware, roleMiddleware(['admin']), 
 // Get all marketer payouts (admin only)
 app.get('/api/admin/marketer-payouts', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
   try {
-    const payouts = await adminDb.collection('marketerPayouts').orderBy('requestedAt', 'desc').get();
-    const data = await Promise.all(payouts.docs.map(async (doc) => {
-      const payout = doc.data();
-      let marketerName = 'Unknown';
+    const data = await getCachedData('admin', 'marketer-payouts', async () => {
+      const payouts = await adminDb.collection('marketerPayouts').orderBy('requestedAt', 'desc').get();
+      return Promise.all(payouts.docs.map(async (doc) => {
+        const payout = doc.data();
+        let marketerName = 'Unknown';
 
-      if (payout.marketerId) {
-        const userDoc = await adminDb.collection('users').doc(payout.marketerId).get();
-        if (userDoc.exists) {
-          marketerName = userDoc.data().name || userDoc.data().fullName || 'Unknown';
+        if (payout.marketerId) {
+          const userDoc = await adminDb.collection('users').doc(payout.marketerId).get();
+          if (userDoc.exists) {
+            marketerName = userDoc.data().name || userDoc.data().fullName || 'Unknown';
+          }
         }
-      }
 
-      return {
-        id: doc.id,
-        ...payout,
-        marketerName,
-        requestedAt: payout.requestedAt?.toDate ? payout.requestedAt.toDate().toISOString() : payout.requestedAt || null,
-        failReason: payout.failReason || (payout.status === 'paid' ? 'Payment completed' : payout.status === 'processing' ? 'Payment is being processed' : ''),
-        mpesaReceiptNumber: payout.mpesaReceiptNumber || ''
-      };
-    }));
+        return {
+          id: doc.id,
+          ...payout,
+          marketerName,
+          requestedAt: payout.requestedAt?.toDate ? payout.requestedAt.toDate().toISOString() : payout.requestedAt || null,
+          failReason: payout.failReason || (payout.status === 'paid' ? 'Payment completed' : payout.status === 'processing' ? 'Payment is being processed' : ''),
+          mpesaReceiptNumber: payout.mpesaReceiptNumber || ''
+        };
+      }));
+    }, 20 * 1000);
 
     res.json(data);
   } catch (error) {
@@ -1697,8 +1588,12 @@ app.get('/api/admin/marketer-payouts', authMiddleware, roleMiddleware(['admin'])
 // Get platform settings (admin only)
 app.get('/api/admin/settings', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
   try {
-    const settings = await adminDb.collection('settings').doc('platform').get();
-    res.json(settings.data() || {});
+    const settings = await getCachedData('admin', 'settings', async () => {
+      const snapshot = await adminDb.collection('settings').doc('platform').get();
+      return snapshot.data() || {};
+    }, 60 * 1000);
+
+    res.json(settings);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -1764,32 +1659,38 @@ app.put('/api/admin/settings', authMiddleware, roleMiddleware(['admin']), async 
 app.get('/api/admin/marketer/:id', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
   try {
     const { id } = req.params;
-    const marketerDoc = await adminDb.collection('users').doc(id).get();
-    if (!marketerDoc.exists || marketerDoc.data().role !== 'marketer') {
+    const payload = await getCachedData('admin', `marketer:${id}`, async () => {
+      const marketerDoc = await adminDb.collection('users').doc(id).get();
+      if (!marketerDoc.exists || marketerDoc.data().role !== 'marketer') {
+        return null;
+      }
+
+      const marketer = { id: marketerDoc.id, ...marketerDoc.data() };
+
+      const tradersSnapshot = await adminDb.collection('users')
+        .where('role', '==', 'trader')
+        .where('marketerId', '==', id)
+        .get();
+
+      const traders = tradersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      const marketerDataDoc = await adminDb.collection('marketers').doc(id).get();
+      const marketerData = marketerDataDoc.data() || {};
+
+      return {
+        marketer,
+        traders,
+        totalCommission: marketerData.totalEarned || 0,
+        commissionBalance: marketerData.commissionBalance || 0,
+        tradersCount: traders.length
+      };
+    }, 20 * 1000);
+
+    if (!payload) {
       return res.status(404).json({ message: 'Marketer not found' });
     }
 
-    const marketer = { id: marketerDoc.id, ...marketerDoc.data() };
-
-    // Get all traders linked to this marketer
-    const tradersSnapshot = await adminDb.collection('users')
-      .where('role', '==', 'trader')
-      .where('marketerId', '==', id)
-      .get();
-    
-    const traders = tradersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-    // Get marketer's commission data
-    const marketerDataDoc = await adminDb.collection('marketers').doc(id).get();
-    const marketerData = marketerDataDoc.data() || {};
-
-    res.json({
-      marketer,
-      traders,
-      totalCommission: marketerData.totalEarned || 0,
-      commissionBalance: marketerData.commissionBalance || 0,
-      tradersCount: traders.length
-    });
+    res.json(payload);
   } catch (error) {
     console.error('Get marketer error:', error);
     res.status(400).json({ message: error.message });
@@ -1800,38 +1701,45 @@ app.get('/api/admin/marketer/:id', authMiddleware, roleMiddleware(['admin']), as
 app.get('/api/admin/trader/:id', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
   try {
     const { id } = req.params;
-    const userDoc = await adminDb.collection('users').doc(id).get();
-    if (!userDoc.exists || userDoc.data().role !== 'trader') {
+    const payload = await getCachedData('admin', `trader:${id}`, async () => {
+      const userDoc = await adminDb.collection('users').doc(id).get();
+      if (!userDoc.exists || userDoc.data().role !== 'trader') {
+        return null;
+      }
+
+      const traderDoc = await adminDb.collection('traders').doc(id).get();
+      const userData = userDoc.data();
+      const traderData = traderDoc.exists ? traderDoc.data() : {};
+
+      const trader = {
+        id: userDoc.id,
+        ...userData,
+        ...traderData,
+        tradingBalance: traderData.tradingBalance ?? userData.tradingBalance ?? 0,
+        depositBalance: traderData.depositBalance ?? userData.depositBalance ?? 0
+      };
+
+      let marketerName = 'No marketer';
+      if (trader.marketerId && trader.marketerId !== 'ADMIN') {
+        const marketerDoc = await adminDb.collection('users').doc(trader.marketerId).get();
+        if (marketerDoc.exists) {
+          marketerName = marketerDoc.data().name;
+        }
+      } else if (trader.marketerId === 'ADMIN') {
+        marketerName = 'Admin';
+      }
+
+      return {
+        ...trader,
+        marketerName
+      };
+    }, 20 * 1000);
+
+    if (!payload) {
       return res.status(404).json({ message: 'Trader not found' });
     }
 
-    const traderDoc = await adminDb.collection('traders').doc(id).get();
-    const userData = userDoc.data();
-    const traderData = traderDoc.exists ? traderDoc.data() : {};
-
-    const trader = {
-      id: userDoc.id,
-      ...userData,
-      ...traderData,
-      tradingBalance: traderData.tradingBalance ?? userData.tradingBalance ?? 0,
-      depositBalance: traderData.depositBalance ?? userData.depositBalance ?? 0
-    };
-
-    // Get marketer info if exists
-    let marketerName = 'No marketer';
-    if (trader.marketerId && trader.marketerId !== 'ADMIN') {
-      const marketerDoc = await adminDb.collection('users').doc(trader.marketerId).get();
-      if (marketerDoc.exists) {
-        marketerName = marketerDoc.data().name;
-      }
-    } else if (trader.marketerId === 'ADMIN') {
-      marketerName = 'Admin';
-    }
-
-    res.json({
-      ...trader,
-      marketerName
-    });
+    res.json(payload);
   } catch (error) {
     console.error('Get trader error:', error);
     res.status(400).json({ message: error.message });
@@ -1985,231 +1893,11 @@ app.post('/api/admin/promote-to-marketer/:id', authMiddleware, roleMiddleware(['
   }
 });
 
-// --- BOT PURCHASE ADMIN ENDPOINTS ---
-
-// Get pending bot purchases
-app.get('/api/admin/bot-purchases', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
-  try {
-    const { status = 'pending' } = req.query;
-    
-    let query = adminDb.collection('botPurchases');
-    if (status) {
-      query = query.where('status', '==', status);
-    }
-    
-    const snapshot = await query.orderBy('createdAt', 'desc').get();
-    const botPurchases = [];
-    
-    for (const doc of snapshot.docs) {
-      const data = doc.data();
-      const traderSnap = await adminDb.collection('users').doc(data.traderId).get();
-      const pkgSnap = await adminDb.collection('packages').doc(data.packageId).get();
-      
-      botPurchases.push({
-        ...data,
-        traderInfo: traderSnap.exists ? { id: traderSnap.id, name: traderSnap.data().name, email: traderSnap.data().email } : null,
-        packageInfo: pkgSnap.exists ? { id: pkgSnap.id, name: pkgSnap.data().name, price: pkgSnap.data().price, type: pkgSnap.data().type } : null,
-        outstandingAmount: Math.max(0, data.requiredAmount - data.amountPaid)
-      });
-    }
-    
-    res.json({ botPurchases });
-  } catch (error) {
-    console.error('Get bot purchases error:', error);
-    res.status(400).json({ message: error.message });
-  }
-});
-
-// Get trader's pending bot purchases
-app.get('/api/trader/bot-purchases', authMiddleware, async (req, res) => {
-  try {
-    const traderId = req.user.uid;
-    // Query by traderId only, then sort and filter status in memory to avoid composite index requirement
-    const snapshot = await adminDb.collection('botPurchases')
-      .where('traderId', '==', traderId)
-      .get();
-    
-    const botPurchases = [];
-    const allPurchases = snapshot.docs.map(doc => doc.data()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    
-    for (const data of allPurchases) {
-      // Filter for pending status in application code
-      if (data.status !== 'pending') continue;
-      
-      const pkgSnap = await adminDb.collection('packages').doc(data.packageId).get();
-      
-      botPurchases.push({
-        ...data,
-        packageInfo: pkgSnap.exists ? { id: pkgSnap.id, name: pkgSnap.data().name, price: pkgSnap.data().price, type: pkgSnap.data().type } : null,
-        outstandingAmount: Math.max(0, data.requiredAmount - data.amountPaid)
-      });
-    }
-    
-    res.json({ botPurchases });
-  } catch (error) {
-    console.error('Get trader bot purchases error:', error);
-    res.status(400).json({ message: error.message });
-  }
-});
-
-// Admin: Top-up bot purchase
-app.post('/api/admin/bot-purchase/:id/top-up', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { amount, note } = req.body;
-    
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ message: 'Invalid top-up amount' });
-    }
-    
-    const result = await adminDb.runTransaction(async (t) => {
-      const botPurchaseRef = adminDb.collection('botPurchases').doc(id);
-      const botPurchaseDoc = await t.get(botPurchaseRef);
-      
-      if (!botPurchaseDoc.exists) {
-        throw new Error('Bot purchase not found');
-      }
-      
-      const botPurchaseData = botPurchaseDoc.data();
-      if (botPurchaseData.status !== 'pending') {
-        throw new Error('Bot purchase is not pending');
-      }
-      
-      // Get package and trader info
-      const pkgSnap = await t.get(adminDb.collection('packages').doc(botPurchaseData.packageId));
-      const pkg = pkgSnap.data();
-      const traderRef = adminDb.collection('traders').doc(botPurchaseData.traderId);
-      
-      // Create admin top-up transaction record
-      const transactionRef = adminDb.collection('transactions').doc();
-      t.set(transactionRef, {
-        id: transactionRef.id,
-        traderId: botPurchaseData.traderId,
-        marketerId: botPurchaseData.marketerId || 'ADMIN',
-        totalAmount: amount,
-        type: botPurchaseData.type,
-        status: 'success',
-        metadata: { botPurchaseId: id, adminTopUp: true },
-        adminNote: note || '',
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-      
-      // Update bot purchase
-      const newAmountPaid = botPurchaseData.amountPaid + amount;
-      const contributors = botPurchaseData.contributors || [];
-      contributors.push({
-        actor: 'admin',
-        amount: amount,
-        txnId: transactionRef.id,
-        note: note || '',
-        createdAt: admin.firestore.Timestamp.fromDate(new Date())
-      });
-      
-      t.update(botPurchaseRef, {
-        amountPaid: newAmountPaid,
-        contributors: contributors,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-      
-      // If fully paid, activate the bot
-      if (newAmountPaid >= botPurchaseData.requiredAmount) {
-        await activateBotPurchase(traderRef, pkg, botPurchaseRef, botPurchaseData.marketerId || 'ADMIN', t, transactionRef.id);
-      }
-      
-      invalidateCache('botPurchases', 'traders', 'transactions');
-      
-      return {
-        success: true,
-        message: newAmountPaid >= botPurchaseData.requiredAmount ? 'Bot activated!' : 'Top-up recorded',
-        botPurchase: { id, amountPaid: newAmountPaid, outstandingAmount: Math.max(0, botPurchaseData.requiredAmount - newAmountPaid) }
-      };
-    });
-    
-    res.json(result);
-  } catch (error) {
-    console.error('Top-up bot purchase error:', error);
-    res.status(400).json({ message: error.message });
-  }
-});
-
-// Admin: Mark bot purchase as fully paid
-app.post('/api/admin/bot-purchase/:id/mark-paid', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { note } = req.body;
-    
-    const result = await adminDb.runTransaction(async (t) => {
-      const botPurchaseRef = adminDb.collection('botPurchases').doc(id);
-      const botPurchaseDoc = await t.get(botPurchaseRef);
-      
-      if (!botPurchaseDoc.exists) {
-        throw new Error('Bot purchase not found');
-      }
-      
-      const botPurchaseData = botPurchaseDoc.data();
-      if (botPurchaseData.status !== 'pending') {
-        throw new Error('Bot purchase is not pending');
-      }
-      
-      const outstandingAmount = botPurchaseData.requiredAmount - botPurchaseData.amountPaid;
-      
-      // Get package and trader info
-      const pkgSnap = await t.get(adminDb.collection('packages').doc(botPurchaseData.packageId));
-      const pkg = pkgSnap.data();
-      const traderRef = adminDb.collection('traders').doc(botPurchaseData.traderId);
-      
-      // Create admin payment transaction record
-      const transactionRef = adminDb.collection('transactions').doc();
-      t.set(transactionRef, {
-        id: transactionRef.id,
-        traderId: botPurchaseData.traderId,
-        marketerId: botPurchaseData.marketerId || 'ADMIN',
-        totalAmount: outstandingAmount,
-        type: botPurchaseData.type,
-        status: 'success',
-        metadata: { botPurchaseId: id, adminMarkedPaid: true },
-        adminNote: note || 'Admin marked as fully paid',
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-      
-      // Update bot purchase with final top-up
-      const contributors = botPurchaseData.contributors || [];
-      contributors.push({
-        actor: 'admin',
-        amount: outstandingAmount,
-        txnId: transactionRef.id,
-        note: note || 'Marked as paid by admin',
-        createdAt: admin.firestore.Timestamp.fromDate(new Date())
-      });
-      
-      t.update(botPurchaseRef, {
-        amountPaid: botPurchaseData.requiredAmount,
-        contributors: contributors,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-      
-      // Activate the bot
-      await activateBotPurchase(traderRef, pkg, botPurchaseRef, botPurchaseData.marketerId || 'ADMIN', t, transactionRef.id);
-      
-      invalidateCache('botPurchases', 'traders', 'transactions');
-      
-      return {
-        success: true,
-        message: 'Bot purchase marked as paid and bot activated',
-        botPurchase: { id, status: 'paid', amountPaid: botPurchaseData.requiredAmount }
-      };
-    });
-    
-    res.json(result);
-  } catch (error) {
-    console.error('Mark paid bot purchase error:', error);
-    res.status(400).json({ message: error.message });
-  }
-});
+// Bot purchases endpoints removed
 
 // --- CRON JOB (Session Completion) ---
 
-cron.schedule('*/10 * * * * *', async () => {
+cron.schedule('*/5 * * * *', async () => {
   console.log('Running session completion check...');
   const now = Date.now();
   
@@ -2552,16 +2240,20 @@ const serializeWithdrawal = (data) => ({
 app.get('/api/admin/withdrawals', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
   try {
     const { status } = req.query;
-    let query = adminDb.collection('withdrawals');
+    const cacheKey = `withdrawals:${status || 'all'}`;
+    const payload = await getCachedData('admin', cacheKey, async () => {
+      let query = adminDb.collection('withdrawals');
 
-    if (status) {
-      query = query.where('status', '==', status);
-    }
+      if (status) {
+        query = query.where('status', '==', status);
+      }
 
-    const snapshot = await query.orderBy('requestedAt', 'desc').get();
-    const withdrawals = snapshot.docs.map((doc) => serializeWithdrawal({ id: doc.id, ...doc.data() }));
+      const snapshot = await query.orderBy('requestedAt', 'desc').get();
+      const withdrawals = snapshot.docs.map((doc) => serializeWithdrawal({ id: doc.id, ...doc.data() }));
+      return { withdrawals };
+    }, 20 * 1000);
 
-    res.json({ withdrawals });
+    res.json(payload);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -2569,15 +2261,19 @@ app.get('/api/admin/withdrawals', authMiddleware, roleMiddleware(['admin']), asy
 
 app.get('/api/trader/withdrawals', authMiddleware, roleMiddleware(['trader']), async (req, res) => {
   try {
-    const snapshot = await adminDb.collection('withdrawals')
-      .where('traderId', '==', req.user.uid)
-      .get();
+    const payload = await getCachedData('trader', `withdrawals:${req.user.uid}`, async () => {
+      const snapshot = await adminDb.collection('withdrawals')
+        .where('traderId', '==', req.user.uid)
+        .get();
 
-    const withdrawals = snapshot.docs
-      .map((doc) => serializeWithdrawal({ id: doc.id, ...doc.data() }))
-      .sort((a, b) => (new Date(b.requestedAt || 0).getTime() || 0) - (new Date(a.requestedAt || 0).getTime() || 0));
+      const withdrawals = snapshot.docs
+        .map((doc) => serializeWithdrawal({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => (new Date(b.requestedAt || 0).getTime() || 0) - (new Date(a.requestedAt || 0).getTime() || 0));
 
-    res.json({ withdrawals });
+      return { withdrawals };
+    }, 20 * 1000);
+
+    res.json(payload);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }

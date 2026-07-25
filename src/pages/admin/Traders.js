@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/firebase.js';
-import { collection, query, where, orderBy, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, doc, getDocs, updateDoc } from 'firebase/firestore';
 import { formatKSh } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
 import { Users, Shield, ShieldOff, Search, Eye, X, Edit2 } from 'lucide-react';
@@ -19,31 +19,48 @@ export default function AdminTraders() {
   const [syncMessage, setSyncMessage] = useState(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'users'), where('role', '==', 'trader'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, async (snapshot) => {
-      const tradersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      // Enrich traders with marketer names
-      const enrichedTraders = await Promise.all(
-        tradersData.map(async (trader) => {
+    let isActive = true;
+
+    const loadTraders = async () => {
+      try {
+        const q = query(collection(db, 'users'), where('role', '==', 'trader'), orderBy('createdAt', 'desc'));
+        const [tradersSnapshot, marketersSnapshot] = await Promise.all([
+          getDocs(q),
+          getDocs(query(collection(db, 'users'), where('role', '==', 'marketer')))
+        ]);
+
+        const marketerNameMap = new Map(
+          marketersSnapshot.docs.map((marketerDoc) => [
+            marketerDoc.id,
+            marketerDoc.data().name || marketerDoc.data().fullName || 'Unknown marketer'
+          ])
+        );
+
+        const tradersData = tradersSnapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+        const enrichedTraders = tradersData.map((trader) => {
           if (trader.marketerId && trader.marketerId !== 'ADMIN') {
-            try {
-              const marketerDoc = await getDoc(doc(db, 'users', trader.marketerId));
-              if (marketerDoc.exists()) {
-                return { ...trader, marketerName: marketerDoc.data().name };
-              }
-            } catch (err) {
-              console.error('Error fetching marketer:', err);
-            }
+            return { ...trader, marketerName: marketerNameMap.get(trader.marketerId) || trader.marketerId };
           }
+
           return { ...trader, marketerName: trader.marketerId === 'ADMIN' ? 'Admin' : trader.marketerId };
-        })
-      );
-      
-      setTraders(enrichedTraders);
-      setLoading(false);
-    });
-    return () => unsub();
+        });
+
+        if (!isActive) return;
+        setTraders(enrichedTraders);
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching traders:', err);
+        if (isActive) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadTraders();
+
+    return () => {
+      isActive = false;
+    };
   }, []);
 
   const handleToggleStatus = async (traderId, currentStatus) => {

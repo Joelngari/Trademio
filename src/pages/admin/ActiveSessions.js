@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/firebase.js';
-import { collection, query, where, onSnapshot, doc, updateDoc, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, increment } from 'firebase/firestore';
 import { formatKSh } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
 import { Activity, Clock, CheckCircle2, MoreVertical } from 'lucide-react';
@@ -10,12 +10,19 @@ export default function ActiveSessions() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, 'sessions'), where('status', '==', 'active'));
-    const unsub = onSnapshot(q, (snapshot) => {
-      setSessions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    });
-    return () => unsub();
+    const loadSessions = async () => {
+      try {
+        const q = query(collection(db, 'sessions'), where('status', '==', 'active'));
+        const snapshot = await getDocs(q);
+        setSessions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (err) {
+        console.error('Failed to load active sessions', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSessions();
   }, []);
 
   const handleManualComplete = async (session) => {

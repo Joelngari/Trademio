@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../lib/AuthContext.js';
 import { db } from '../../lib/firebase.js';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { formatKSh } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
 import { History, CheckCircle2, Clock, XCircle, ArrowRight } from 'lucide-react';
@@ -12,19 +12,27 @@ export default function WithdrawalHistory() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'marketerPayouts'),
-      where('marketerId', '==', user.uid),
-      orderBy('requestedAt', 'desc')
-    );
+    const loadPayouts = async () => {
+      try {
+        const q = query(
+          collection(db, 'marketerPayouts'),
+          where('marketerId', '==', user.uid),
+          orderBy('requestedAt', 'desc')
+        );
 
-    const unsub = onSnapshot(q, (snapshot) => {
-      setPayouts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    });
+        const snapshot = await getDocs(q);
+        setPayouts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (err) {
+        console.error('Failed to load payout history', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    return () => unsub();
-  }, [user.uid]);
+    if (user?.uid) {
+      loadPayouts();
+    }
+  }, [user?.uid]);
 
   if (loading) return <SkeletonLoader type="table" />;
 

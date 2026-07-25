@@ -14,7 +14,7 @@ export default function ForexBot() {
   const { profile } = useAuth();
   const [packages, setPackages] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
-  const [botPurchases, setBotPurchases] = useState([]);
+  // bot purchases removed
   const [depositBalance, setDepositBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(null);
@@ -24,14 +24,6 @@ export default function ForexBot() {
 
   useEffect(() => () => paymentWatchRef.current?.(), []);
 
-  const fetchPendingPurchases = async () => {
-    try {
-      const purchasesRes = await traderApi.getBotPurchases();
-      setBotPurchases(purchasesRes.data.botPurchases || []);
-    } catch (err) {
-      console.warn('Failed to fetch bot purchases:', err);
-    }
-  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -40,7 +32,6 @@ export default function ForexBot() {
         setPackages(response.data.packages.filter(p => p.type === 'forex'));
         setActiveSession(response.data.activeSession);
         setDepositBalance(response.data.trader?.depositBalance || 0);
-        await fetchPendingPurchases();
       } catch (err) {
           console.error(err);
           // Silently log fetch errors
@@ -134,47 +125,7 @@ export default function ForexBot() {
         </div>
       )}
 
-      {botPurchases.length > 0 && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-6">
-          <div className="flex items-start gap-3 mb-4">
-            <AlertCircle className="text-yellow-500 mt-1" size={24} />
-            <div>
-              <h3 className="text-lg font-bold text-white">Pending Purchases</h3>
-              <p className="text-sm text-gray-400">Complete these purchases or wait for your mentor to reconcile the remainder.</p>
-            </div>
-          </div>
-          
-          <div className="space-y-3">
-            {botPurchases.map((purchase) => (
-              <div key={purchase.id} className="bg-black/30 border border-white/10 rounded p-4 flex items-center justify-between">
-                <div className="flex-1">
-                  <p className="text-white font-semibold">{purchase.packageInfo?.name || 'Bot'}</p>
-                  <p className="text-sm text-gray-400">
-                    {formatCurrency(purchase.amountPaid, profile?.preferredCurrency)} of {formatCurrency(purchase.requiredAmount, profile?.preferredCurrency)} paid
-                  </p>
-                  <div className="w-full bg-white/10 rounded-full h-2 mt-2">
-                    <div 
-                      className="bg-cyan-500 h-2 rounded-full transition-all" 
-                      style={{ width: `${(purchase.amountPaid / purchase.requiredAmount) * 100}%` }}
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setAmountInputs(prev => ({ ...prev, [purchase.packageInfo?.id]: purchase.outstandingAmount }));
-                    setPhoneInputs(prev => ({ ...prev, [purchase.packageInfo?.id]: phoneInputs[purchase.packageInfo?.id] || profile?.phoneNumber || '' }));
-                    handlePurchase(purchase.packageInfo?.id, true, purchase.id);
-                  }}
-                  disabled={purchasing === purchase.packageInfo?.id}
-                  className="ml-4 px-4 py-2 bg-cyan-500 text-white rounded font-semibold hover:bg-cyan-600 transition-all whitespace-nowrap disabled:opacity-50"
-                >
-                  {purchasing === purchase.packageInfo?.id ? 'Processing...' : 'Complete Payment'}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* bot purchases removed */}
 
       {activeSession && (
         <div className="rounded border border-[#87ceeb]/20 bg-[#87ceeb]/10 p-6 space-y-3">

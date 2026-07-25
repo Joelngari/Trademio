@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/firebase.js';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { formatKSh } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
 
@@ -9,12 +9,19 @@ export default function AdminTransactions() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snapshot) => {
-      setTransactions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    });
-    return () => unsub();
+    const loadTransactions = async () => {
+      try {
+        const q = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'));
+        const snapshot = await getDocs(q);
+        setTransactions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (err) {
+        console.error('Failed to load transactions', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadTransactions();
   }, []);
 
   if (loading) return <SkeletonLoader type="table" />;

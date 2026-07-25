@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../lib/AuthContext.js';
 import { traderApi } from '../../services/api.js';
 import { db } from '../../lib/firebase.js';
-import { collection, query, where, doc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, doc, getDoc, getDocs } from 'firebase/firestore';
 import { formatCurrency } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
 import { RefreshCw, Clock, ArrowRight, CheckCircle2 } from 'lucide-react';
@@ -76,41 +76,64 @@ export default function Trades() {
   }, [fetchData]);
 
   useEffect(() => {
-    let sessionUnsub = null;
-    if (data?.activeSession) {
-      const sessionRef = doc(db, 'sessions', data.activeSession.id);
-      sessionUnsub = onSnapshot(sessionRef, (docSnap) => {
-        if (docSnap.exists()) {
-          setActiveSession(docSnap.data());
-        } else {
+    let isActive = true;
+
+    const loadSession = async () => {
+      if (!data?.activeSession?.id) {
+        setActiveSession(null);
+        return;
+      }
+
+      try {
+        const sessionSnap = await getDoc(doc(db, 'sessions', data.activeSession.id));
+        if (!isActive) return;
+        setActiveSession(sessionSnap.exists() ? { id: sessionSnap.id, ...sessionSnap.data() } : null);
+      } catch (err) {
+        console.error('Failed to load active session:', err);
+        if (isActive) {
           setActiveSession(null);
         }
-      });
-    }
+      }
+    };
+
+    loadSession();
 
     return () => {
-      if (sessionUnsub) sessionUnsub();
+      isActive = false;
     };
-  }, [data?.activeSession]);
+  }, [data?.activeSession?.id]);
 
   useEffect(() => {
-    if (!profile?.uid) return;
+    let isActive = true;
 
-    const ordersQuery = query(
-      collection(db, 'tradeOrders'),
-      where('traderId', '==', profile.uid)
-    );
+    const loadOrders = async () => {
+      if (!profile?.uid) return;
 
-    const unsubscribe = onSnapshot(ordersQuery, (snapshot) => {
-      const newOrders = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-      setOrders(newOrders);
-      setData((prev) => ({
-        ...prev,
-        ...buildDashboardFromOrders(newOrders, marketData)
-      }));
-    });
+      try {
+        const ordersQuery = query(
+          collection(db, 'tradeOrders'),
+          where('traderId', '==', profile.uid)
+        );
 
-    return () => unsubscribe();
+        const snapshot = await getDocs(ordersQuery);
+        if (!isActive) return;
+
+        const newOrders = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+        setOrders(newOrders);
+        setData((prev) => ({
+          ...prev,
+          ...buildDashboardFromOrders(newOrders, marketData)
+        }));
+      } catch (err) {
+        console.error('Failed to load orders:', err);
+      }
+    };
+
+    loadOrders();
+
+    return () => {
+      isActive = false;
+    };
   }, [profile?.uid, marketData]);
 
   useEffect(() => {

@@ -12,7 +12,7 @@ export default function Investment() {
   const { profile } = useAuth();
   const [packages, setPackages] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
-  const [botPurchases, setBotPurchases] = useState([]);
+  // bot purchases removed
   const [depositBalance, setDepositBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [amount, setAmount] = useState(1000);
@@ -22,14 +22,6 @@ export default function Investment() {
 
   useEffect(() => () => paymentWatchRef.current?.(), []);
 
-  const fetchPendingPurchases = async () => {
-    try {
-      const purchasesRes = await traderApi.getBotPurchases();
-      setBotPurchases(purchasesRes.data.botPurchases || []);
-    } catch (err) {
-      console.warn('Failed to fetch bot purchases:', err);
-    }
-  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -37,7 +29,6 @@ export default function Investment() {
         const response = await traderApi.getDashboard();
         setActiveSession(response.data.activeSession);
         setDepositBalance(response.data.trader?.depositBalance || 0);
-        await fetchPendingPurchases();
       } catch (err) {
         console.error(err);
         // Silently log fetch errors
@@ -131,34 +122,7 @@ export default function Investment() {
             </div>
           )}
 
-          {botPurchases.length > 0 && (
-            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-6">
-              <div className="flex items-start gap-3 mb-4">
-                <AlertCircle className="text-yellow-500 mt-1" size={24} />
-                <div>
-                  <h3 className="text-lg font-bold text-white">Pending Investments</h3>
-                  <p className="text-sm text-gray-400">Complete these or wait for your mentor to reconcile the remainder.</p>
-                </div>
-              </div>
-              
-              <div className="space-y-3">
-                {botPurchases.map((purchase) => (
-                  <div key={purchase.id} className="bg-black/30 border border-white/10 rounded p-4">
-                    <p className="text-white font-semibold mb-2">{purchase.packageInfo?.name || 'Investment'}</p>
-                    <p className="text-sm text-gray-400 mb-2">
-                      {formatCurrency(purchase.amountPaid, profile?.preferredCurrency)} of {formatCurrency(purchase.requiredAmount, profile?.preferredCurrency)} invested
-                    </p>
-                    <div className="w-full bg-white/10 rounded-full h-2">
-                      <div 
-                        className="bg-cyan-500 h-2 rounded-full transition-all" 
-                        style={{ width: `${(purchase.amountPaid / purchase.requiredAmount) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* bot purchases removed */}
 
           <button
             onClick={handleInvestment}

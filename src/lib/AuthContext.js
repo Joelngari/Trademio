@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from './firebase.js';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 
 const AuthContext = createContext();
 
@@ -13,29 +13,26 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     isMountedRef.current = true;
-    let unsubProfile = null;
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
       if (!isMountedRef.current) return;
       setLoading(true);
       if (authUser) {
         setUser(authUser);
-        
-        // Use a snapshot listener for real-time updates (like suspension)
+
         const profileRef = doc(db, 'users', authUser.uid);
-        unsubProfile = onSnapshot(profileRef, (docSnap) => {
+        try {
+          const docSnap = await getDoc(profileRef);
           if (!isMountedRef.current) return;
-          if (docSnap.exists()) {
-            setProfile(docSnap.data());
-          } else {
-            setProfile(null);
-          }
-          setLoading(false);
-        }, (error) => {
+          setProfile(docSnap.exists() ? docSnap.data() : null);
+        } catch (error) {
           if (!isMountedRef.current) return;
-          console.warn("Error fetching profile:", error);
+          console.warn('Error fetching profile:', error);
           setProfile(null);
-          setLoading(false);
-        });
+        } finally {
+          if (isMountedRef.current) {
+            setLoading(false);
+          }
+        }
       } else {
         if (!isMountedRef.current) return;
         setUser(null);
@@ -46,7 +43,6 @@ export function AuthProvider({ children }) {
 
     return () => {
       isMountedRef.current = false;
-      if (typeof unsubProfile === 'function') unsubProfile();
       unsubscribe();
     };
   }, []);

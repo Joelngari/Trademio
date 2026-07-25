@@ -6,7 +6,7 @@ import { formatCurrency } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
 import { Wallet, TrendingUp, ArrowUpRight, ArrowDownLeft, RefreshCw, Activity } from 'lucide-react';
 import { db } from '../../lib/firebase.js';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function TraderHome() {
   const { profile } = useAuth();
@@ -52,28 +52,40 @@ export default function TraderHome() {
     return () => clearInterval(timer);
   }, [data?.activeSession]);
 
-  // Set up real-time listener for trader data
   useEffect(() => {
-    if (!profile?.uid) return;
+    let isActive = true;
 
-    const unsubscribe = onSnapshot(doc(db, 'traders', profile.uid), (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const traderData = docSnapshot.data();
+    const loadTraderProfile = async () => {
+      if (!profile?.uid) return;
 
-        setData(prev => ({
-          ...prev,
-          trader: {
-            ...(prev?.trader || {}),
-            ...traderData,
-            tradingBalance: traderData.tradingBalance ?? prev?.trader?.tradingBalance ?? 0,
-            depositBalance: traderData.depositBalance ?? prev?.trader?.depositBalance ?? 0,
-            activeSessionId: traderData.activeSessionId ?? prev?.trader?.activeSessionId ?? null
-          }
-        }));
+      try {
+        const docSnapshot = await getDoc(doc(db, 'traders', profile.uid));
+        if (!isActive) return;
+
+        if (docSnapshot.exists()) {
+          const traderData = docSnapshot.data();
+
+          setData(prev => ({
+            ...prev,
+            trader: {
+              ...(prev?.trader || {}),
+              ...traderData,
+              tradingBalance: traderData.tradingBalance ?? prev?.trader?.tradingBalance ?? 0,
+              depositBalance: traderData.depositBalance ?? prev?.trader?.depositBalance ?? 0,
+              activeSessionId: traderData.activeSessionId ?? prev?.trader?.activeSessionId ?? null
+            }
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to load trader profile:', err);
       }
-    });
+    };
 
-    return () => unsubscribe();
+    loadTraderProfile();
+
+    return () => {
+      isActive = false;
+    };
   }, [profile?.uid]);
 
   const handleRefresh = async () => {

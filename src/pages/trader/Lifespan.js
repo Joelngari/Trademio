@@ -12,7 +12,7 @@ export default function Lifespan() {
   const { profile } = useAuth();
   const [packages, setPackages] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
-  const [botPurchases, setBotPurchases] = useState([]);
+  // bot purchases removed
   const [depositBalance, setDepositBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(null);
@@ -21,14 +21,6 @@ export default function Lifespan() {
 
   useEffect(() => () => paymentWatchRef.current?.(), []);
 
-  const fetchPendingPurchases = async () => {
-    try {
-      const purchasesRes = await traderApi.getBotPurchases();
-      setBotPurchases(purchasesRes.data.botPurchases || []);
-    } catch (err) {
-      console.warn('Failed to fetch bot purchases:', err);
-    }
-  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -37,7 +29,6 @@ export default function Lifespan() {
         setPackages(response.data.packages.filter(p => p.type === 'lifespan'));
         setActiveSession(response.data.activeSession);
         setDepositBalance(response.data.trader?.depositBalance || 0);
-        await fetchPendingPurchases();
       } catch (err) {
         console.error(err);
         // Silently log fetch errors
@@ -97,47 +88,7 @@ export default function Lifespan() {
         </div>
       )}
 
-      {botPurchases.length > 0 && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-6">
-          <div className="flex items-start gap-3 mb-4">
-            <AlertCircle className="text-yellow-500 mt-1" size={24} />
-            <div>
-              <h3 className="text-lg font-bold text-white">Pending Purchases</h3>
-              <p className="text-sm text-gray-400">Complete these purchases or wait for your mentor to reconcile the remainder.</p>
-            </div>
-          </div>
-          
-          <div className="space-y-3">
-            {botPurchases.map((purchase) => (
-              <div key={purchase.id} className="bg-black/30 border border-white/10 rounded p-4 flex items-center justify-between">
-                <div className="flex-1">
-                  <p className="text-white font-semibold">{purchase.packageInfo?.name || 'Bot'}</p>
-                  <p className="text-sm text-gray-400">
-                    {formatCurrency(purchase.amountPaid, profile?.preferredCurrency)} of {formatCurrency(purchase.requiredAmount, profile?.preferredCurrency)} paid
-                  </p>
-                  <div className="w-full bg-white/10 rounded-full h-2 mt-2">
-                    <div 
-                      className="bg-blue-500 h-2 rounded-full transition-all" 
-                      style={{ width: `${(purchase.amountPaid / purchase.requiredAmount) * 100}%` }}
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setAmountInputs(prev => ({ ...prev, [purchase.packageInfo?.id]: purchase.outstandingAmount }));
-                    setPhoneInputs(prev => ({ ...prev, [purchase.packageInfo?.id]: phoneInputs[purchase.packageInfo?.id] || profile?.phoneNumber || '' }));
-                    handlePurchase(purchase.packageInfo?.id, true, purchase.id);
-                  }}
-                  disabled={purchasing === purchase.packageInfo?.id}
-                  className="ml-4 px-4 py-2 bg-blue-500 text-white rounded font-semibold hover:bg-blue-600 transition-all whitespace-nowrap disabled:opacity-50"
-                >
-                  {purchasing === purchase.packageInfo?.id ? 'Processing...' : 'Complete Payment'}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* bot purchases removed */}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {packages.map((pkg) => (
@@ -194,9 +145,7 @@ export default function Lifespan() {
                   {purchasing === pkg.id ? <Loader2 className="animate-spin" /> : activeSession ? 'Term in Progress' : 'Initiate Session'}
                 </button>
               )}
-              {botPurchases.some(bp => bp.packageInfo?.id === pkg.id) && (
-                <div className="mt-3 text-sm text-yellow-300">You have a pending purchase for this plan — resume from the Pending Purchases panel.</div>
-              )}
+              {/* bot purchases removed */}
             </div>
           </div>
         ))}

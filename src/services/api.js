@@ -51,15 +51,12 @@ export const traderApi = {
   placeOrder: (data) => api.post('/trader/order', data),
   stopSession: (sessionId) => api.post(`/trader/session/${sessionId}/stop`),
   resumeSession: (sessionId) => api.post(`/trader/session/${sessionId}/restart`),
-  getBotPurchases: () => api.get('/trader/bot-purchases'),
   getWithdrawals: () => api.get('/trader/withdrawals'),
 };
 
 export const adminApi = {
   getDashboard: () => api.get('/admin/dashboard'),
-  getBotPurchases: (query) => api.get('/admin/bot-purchases', { params: query }),
-  topUpBotPurchase: (id, amount, note) => api.post(`/admin/bot-purchase/${id}/top-up`, { amount, note }),
-  markBotPurchasePaid: (id, note) => api.post(`/admin/bot-purchase/${id}/mark-paid`, { note }),
+  // bot purchases endpoints removed
   getWithdrawals: (query) => api.get('/admin/withdrawals', { params: query }),
   markWithdrawalPaid: (id, data) => api.post(`/admin/withdrawals/${id}/mark-paid`, data),
   rejectWithdrawal: (id, data) => api.post(`/admin/withdrawals/${id}/reject`, data),

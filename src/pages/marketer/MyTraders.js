@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../lib/AuthContext.js';
 import { db } from '../../lib/firebase.js';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
 import { Users, Mail, Phone, Calendar, Search } from 'lucide-react';
 
@@ -12,25 +12,27 @@ export default function MyTraders() {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    // ✅ Wait until role is confirmed
     if (!user || role !== 'marketer') return;
 
-    const q = query(
-      collection(db, 'traders'), // ✅ correct collection
-      where('marketerId', '==', user.uid),
-      orderBy('createdAt', 'desc')
-    );
+    const loadTraders = async () => {
+      try {
+        const q = query(
+          collection(db, 'traders'),
+          where('marketerId', '==', user.uid),
+          orderBy('createdAt', 'desc')
+        );
 
-    const unsub = onSnapshot(q, (snapshot) => {
-      setTraders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    }, (error) => {
-      console.error('MyTraders error:', error);
-      setLoading(false);
-    });
+        const snapshot = await getDocs(q);
+        setTraders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (error) {
+        console.error('MyTraders error:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    return () => unsub();
-  }, [user, role]); // ✅ depends on role too
+    loadTraders();
+  }, [user, role]);
 
   const searchTermLower = searchTerm.toLowerCase();
   const filteredTraders = traders.filter((t) => {

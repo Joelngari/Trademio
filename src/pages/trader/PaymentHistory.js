@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../lib/AuthContext.js';
 import { db } from '../../lib/firebase.js';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { formatCurrency } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
 import { CreditCard, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2, XCircle } from 'lucide-react';
@@ -12,19 +12,27 @@ export default function PaymentHistory() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'transactions'),
-      where('traderId', '==', user.uid),
-      orderBy('createdAt', 'desc')
-    );
+    const loadTransactions = async () => {
+      try {
+        const q = query(
+          collection(db, 'transactions'),
+          where('traderId', '==', user.uid),
+          orderBy('createdAt', 'desc')
+        );
 
-    const unsub = onSnapshot(q, (snapshot) => {
-      setTransactions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    });
+        const snapshot = await getDocs(q);
+        setTransactions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (err) {
+        console.error('Failed to load payment history', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    return () => unsub();
-  }, [user.uid]);
+    if (user?.uid) {
+      loadTransactions();
+    }
+  }, [user?.uid]);
 
   if (loading) return <SkeletonLoader type="table" />;
 
