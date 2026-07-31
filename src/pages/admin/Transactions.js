@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/firebase.js';
-import { collection, query, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, getDoc, doc } from 'firebase/firestore';
 import { formatKSh } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
 
@@ -13,7 +13,26 @@ export default function AdminTransactions() {
       try {
         const q = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'));
         const snapshot = await getDocs(q);
-        setTransactions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const transactionList = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+
+        const traderNameMap = new Map();
+        await Promise.all(
+          transactionList.map(async (transaction) => {
+            if (!transaction.traderId || traderNameMap.has(transaction.traderId)) return;
+
+            const traderSnap = await getDoc(doc(db, 'users', transaction.traderId));
+            const traderData = traderSnap.data() || {};
+            traderNameMap.set(
+              transaction.traderId,
+              traderData.name || traderData.fullName || traderData.username || 'Unknown trader'
+            );
+          })
+        );
+
+        setTransactions(transactionList.map((transaction) => ({
+          ...transaction,
+          traderName: traderNameMap.get(transaction.traderId) || 'Unknown trader'
+        })));
       } catch (err) {
         console.error('Failed to load transactions', err);
       } finally {
@@ -39,7 +58,7 @@ export default function AdminTransactions() {
             <thead>
               <tr className="bg-white/[0.02] border-b border-white/5 text-xs text-gray-500 uppercase tracking-widest">
                 <th className="px-6 py-5">Ref ID</th>
-                <th className="px-6 py-5">Trader ID</th>
+                <th className="px-6 py-5">Trader</th>
                 <th className="px-6 py-5">Amount</th>
                 <th className="px-6 py-5">Type</th>
                 <th className="px-6 py-5">Status</th>
@@ -50,7 +69,7 @@ export default function AdminTransactions() {
               {transactions.map((t) => (
                 <tr key={t.id} className="hover:bg-white/[0.01] transition-colors">
                   <td className="px-6 py-4 font-mono text-[10px] text-gray-400">{t.id}</td>
-                  <td className="px-6 py-4 font-bold text-white uppercase">{t.traderId.slice(-8)}</td>
+                  <td className="px-6 py-4 font-bold text-white">{t.traderName}</td>
                   <td className="px-6 py-4 font-bold text-white">{formatKSh(t.totalAmount)}</td>
                   <td className="px-6 py-4 capitalize text-gray-400">{t.type}</td>
                   <td className="px-6 py-4">
