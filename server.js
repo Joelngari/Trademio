@@ -668,9 +668,38 @@ app.post('/api/payments/callback', async (req, res) => {
       .get();
 
     if (transactions.empty) {
-      console.warn('Transaction not found:', checkoutRequestId);
-      await markCallbackProcessed(adminDb, checkoutRequestId);
-      return res.status(200).send('Transaction not found');
+      console.warn('Transaction not found in local database:', checkoutRequestId);
+      console.log('🔄 Forwarding callback to Firebase functions...');
+
+      try {
+        const firebaseResponse = await fetch('https://stkcallback-4lwmwa6zra-uc.a.run.app', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-daraja-signature': signature || '',
+            'x-forwarded-for': clientIp
+          },
+          body: JSON.stringify(req.body)
+        });
+
+        const forwardStatus = firebaseResponse.status;
+        console.log('✅ Forwarded to Firebase, response status:', forwardStatus);
+
+        await markCallbackProcessed(adminDb, checkoutRequestId);
+        return res.status(200).json({
+          message: 'Forwarded to Firebase',
+          forwarded: true,
+          status: forwardStatus
+        });
+      } catch (forwardError) {
+        console.error('❌ Error forwarding to Firebase:', forwardError.message);
+        await markCallbackProcessed(adminDb, checkoutRequestId);
+        return res.status(200).json({
+          message: 'Forward attempt made',
+          error: forwardError.message,
+          forwarded: false
+        });
+      }
     }
 
     const transactionDoc = transactions.docs[0];
@@ -2651,11 +2680,16 @@ app.post('/api/payouts/marketer', authMiddleware, roleMiddleware(['marketer']), 
 });
 
 app.post('/api/payouts/callback', async (req, res) => {
+   const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',').map(ip => ip.trim()).filter(Boolean);
+   const clientIp = forwardedFor[0] || req.socket.remoteAddress || req.ip || 'unknown';
+   const signature = req.headers['x-daraja-signature'] || '';
+
    // Shared callback for both trader and marketer payouts
    console.log('✅ B2C callback endpoint hit', {
      method: req.method,
      path: req.path,
-     ip: req.ip || req.headers['x-forwarded-for'],
+     ip: clientIp,
+     xForwardedFor: forwardedFor,
      bodyKeys: Object.keys(req.body || {})
    });
 
@@ -2714,6 +2748,24 @@ app.post('/api/payouts/callback', async (req, res) => {
          }
       } else {
          console.warn('⚠️  B2C callback: no matching payout or withdrawal found', { conversationId });
+         console.log('🔄 Forwarding B2C callback to Firebase functions...');
+         try {
+           const firebaseResponse = await fetch('https://b2ccallback-4lwmwa6zra-uc.a.run.app', {
+             method: 'POST',
+             headers: {
+               'Content-Type': 'application/json',
+               'x-daraja-signature': signature || '',
+               'x-forwarded-for': clientIp
+             },
+             body: JSON.stringify(req.body)
+           });
+
+           console.log('✅ B2C callback forwarded to Firebase, status:', firebaseResponse.status);
+           return res.status(200).json({ received: true, forwarded: true, status: firebaseResponse.status });
+         } catch (forwardError) {
+           console.error('❌ Error forwarding B2C callback to Firebase:', forwardError.message);
+           return res.status(200).json({ received: true, error: forwardError.message, forwarded: false });
+         }
       }
       invalidateCache('marketers', 'traders', 'marketerPayouts', 'withdrawals');
       res.status(200).send('OK');
