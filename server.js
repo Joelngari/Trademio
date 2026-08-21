@@ -1705,10 +1705,21 @@ app.get('/api/admin/marketer/:id', authMiddleware, roleMiddleware(['admin']), as
 
       const marketerDataDoc = await adminDb.collection('marketers').doc(id).get();
       const marketerData = marketerDataDoc.data() || {};
+      const commissionsSnapshot = await adminDb.collection('commissions')
+        .where('marketerId', '==', id)
+        .get();
+      const commissions = commissionsSnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
 
       return {
         marketer,
         traders,
+        commissions,
         totalCommission: marketerData.totalEarned || 0,
         commissionBalance: marketerData.commissionBalance || 0,
         tradersCount: traders.length
@@ -1723,6 +1734,91 @@ app.get('/api/admin/marketer/:id', authMiddleware, roleMiddleware(['admin']), as
   } catch (error) {
     console.error('Get marketer error:', error);
     res.status(400).json({ message: error.message });
+  }
+});
+
+// Update a commission and the marketer's totals atomically (admin only)
+app.patch('/api/admin/commission/:id', authMiddleware, roleMiddleware(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { amount, reason } = req.body || {};
+    const newAmount = Number(amount);
+
+    if (!Number.isFinite(newAmount) || newAmount < 0) {
+      return res.status(400).json({ message: 'Commission amount must be a non-negative number' });
+    }
+    if (!reason || typeof reason !== 'string' || reason.trim().length < 3) {
+      return res.status(400).json({ message: 'A correction reason is required' });
+    }
+
+    const commissionRef = adminDb.collection('commissions').doc(id);
+    const auditRef = adminDb.collection('commissionAudit').doc();
+    let result;
+
+    await adminDb.runTransaction(async (transaction) => {
+      const commissionSnapshot = await transaction.get(commissionRef);
+      if (!commissionSnapshot.exists) {
+        throw new Error('Commission not found');
+      }
+
+      const commission = commissionSnapshot.data();
+      const marketerId = commission.marketerId;
+      const marketerCommissionsSnapshot = await adminDb.collection('commissions')
+        .where('marketerId', '==', marketerId)
+        .get();
+      const latestCommissionIds = marketerCommissionsSnapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          createdAt: doc.data().createdAt?.toMillis?.() || 0
+        }))
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 3)
+        .map(item => item.id);
+      if (!latestCommissionIds.includes(id)) {
+        throw new Error('Only the three latest commissions can be edited');
+      }
+
+      const marketerRef = adminDb.collection('marketers').doc(marketerId);
+      const marketerSnapshot = await transaction.get(marketerRef);
+      if (!marketerSnapshot.exists) {
+        throw new Error('Marketer record not found');
+      }
+
+      const oldAmount = Number(commission.commissionAmount) || 0;
+      const difference = newAmount - oldAmount;
+
+      transaction.update(commissionRef, {
+        commissionAmount: newAmount,
+        adminAmount: Math.max(0, (Number(commission.depositAmount) || 0) - newAmount),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastEditedBy: req.user.uid,
+        lastEditReason: reason.trim()
+      });
+      transaction.update(marketerRef, {
+        commissionBalance: admin.firestore.FieldValue.increment(difference),
+        totalEarned: admin.firestore.FieldValue.increment(difference)
+      });
+      transaction.set(auditRef, {
+        commissionId: id,
+        marketerId,
+        oldAmount,
+        newAmount,
+        difference,
+        reason: reason.trim(),
+        editedBy: req.user.uid,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      result = { marketerId, oldAmount, newAmount };
+    });
+
+    invalidateCache('admin', `marketer:${result.marketerId}`);
+    invalidateCache('commissions');
+    res.json({ message: 'Commission updated successfully', ...result });
+  } catch (error) {
+    console.error('Update commission error:', error);
+    const status = error.message === 'Commission not found' || error.message === 'Marketer record not found' ? 404 : 400;
+    res.status(status).json({ message: error.message });
   }
 });
 

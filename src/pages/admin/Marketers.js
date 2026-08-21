@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/firebase.js';
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, setDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { auth } from '../../lib/firebase.js';
 import { formatKSh } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
-import { Users, Shield, ShieldOff, Search, Eye, Plus, X, TrendingUp } from 'lucide-react';
+import { Users, ShieldOff, Search, Eye, Plus, X, TrendingUp, Pencil, Check } from 'lucide-react';
 
 export default function AdminMarketers() {
   const [marketers, setMarketers] = useState([]);
@@ -14,6 +14,10 @@ export default function AdminMarketers() {
   const [marketerDetails, setMarketerDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [cleanupLoading, setCleanupLoading] = useState(false);
+  const [editingCommissionId, setEditingCommissionId] = useState(null);
+  const [editingCommissionAmount, setEditingCommissionAmount] = useState('');
+  const [editingCommissionReason, setEditingCommissionReason] = useState('');
+  const [commissionSaving, setCommissionSaving] = useState(false);
 
   useEffect(() => {
     const q = query(collection(db, 'users'), where('role', '==', 'marketer'), orderBy('createdAt', 'desc'));
@@ -73,6 +77,52 @@ export default function AdminMarketers() {
       alert('Error: ' + (err.message || err));
     } finally {
       setCleanupLoading(false);
+    }
+  };
+
+  const startCommissionEdit = (commission) => {
+    setEditingCommissionId(commission.id);
+    setEditingCommissionAmount(String(commission.commissionAmount ?? ''));
+    setEditingCommissionReason('');
+  };
+
+  const cancelCommissionEdit = () => {
+    setEditingCommissionId(null);
+    setEditingCommissionAmount('');
+    setEditingCommissionReason('');
+  };
+
+  const saveCommissionEdit = async (commissionId) => {
+    const amount = Number(editingCommissionAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      alert('Enter a valid non-negative amount');
+      return;
+    }
+    if (editingCommissionReason.trim().length < 3) {
+      alert('Enter a reason for this correction');
+      return;
+    }
+
+    setCommissionSaving(true);
+    try {
+      const token = await auth.currentUser.getIdToken();
+      const res = await fetch(`/api/admin/commission/${commissionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ amount, reason: editingCommissionReason })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to update commission');
+      cancelCommissionEdit();
+      await handleViewMarketerDetails(selectedMarketer);
+      alert('Commission updated successfully');
+    } catch (err) {
+      alert('Error: ' + (err.message || err));
+    } finally {
+      setCommissionSaving(false);
     }
   };
 
@@ -235,6 +285,82 @@ export default function AdminMarketers() {
                       <p className="text-xs text-gray-500 uppercase tracking-widest mb-2">Commission Balance</p>
                       <p className="text-2xl font-bold text-green-400">{formatKSh(marketerDetails.commissionBalance)}</p>
                     </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg font-bold text-white mb-4">Commission History</h3>
+                    {marketerDetails.commissions?.length ? (
+                      <div className="bg-white/5 border border-white/10 rounded overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                          <thead>
+                            <tr className="border-b border-white/10 text-xs uppercase tracking-widest text-gray-500">
+                              <th className="px-4 py-3">Type</th>
+                              <th className="px-4 py-3">Amount</th>
+                              <th className="px-4 py-3">Date</th>
+                              <th className="px-4 py-3">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {marketerDetails.commissions.map((commission, index) => (
+                              <tr key={commission.id}>
+                                <td className="px-4 py-3 text-gray-400">{commission.type || 'Deposit'}</td>
+                                <td className="px-4 py-3">
+                                  {index < 3 && editingCommissionId === commission.id ? (
+                                    <div className="flex min-w-56 flex-col gap-2">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={editingCommissionAmount}
+                                        onChange={(event) => setEditingCommissionAmount(event.target.value)}
+                                        className="w-32 rounded border border-white/10 bg-black/20 px-2 py-1 text-white outline-none focus:border-[#87ceeb]"
+                                        aria-label="New commission amount"
+                                        autoFocus
+                                      />
+                                      <input
+                                        type="text"
+                                        value={editingCommissionReason}
+                                        onChange={(event) => setEditingCommissionReason(event.target.value)}
+                                        placeholder="Correction reason"
+                                        className="rounded border border-white/10 bg-black/20 px-2 py-1 text-xs text-white outline-none focus:border-[#87ceeb]"
+                                        aria-label="Correction reason"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span className="font-bold text-green-400">{formatKSh(commission.commissionAmount)}</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-xs text-gray-500">
+                                  {commission.createdAt?.seconds
+                                    ? new Date(commission.createdAt.seconds * 1000).toLocaleString()
+                                    : 'Recently'}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {index < 3 && editingCommissionId === commission.id ? (
+                                    <div className="flex items-center gap-2">
+                                      <button type="button" onClick={() => saveCommissionEdit(commission.id)} disabled={commissionSaving} className="text-green-400 hover:text-green-300 disabled:opacity-50" title="Save commission" aria-label="Save commission">
+                                        <Check size={16} />
+                                      </button>
+                                      <button type="button" onClick={cancelCommissionEdit} disabled={commissionSaving} className="text-gray-400 hover:text-white disabled:opacity-50" title="Cancel edit" aria-label="Cancel edit">
+                                        <X size={16} />
+                                      </button>
+                                    </div>
+                                  ) : index < 3 ? (
+                                    <button type="button" onClick={() => startCommissionEdit(commission)} className="text-gray-400 hover:text-[#87ceeb]" title="Edit commission" aria-label="Edit commission">
+                                      <Pencil size={16} />
+                                    </button>
+                                  ) : (
+                                    <span className="text-xs text-gray-600">Locked</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="rounded border border-white/10 bg-white/5 p-4 text-sm text-gray-500">No commissions recorded.</p>
+                    )}
                   </div>
 
                   {/* Recruited Traders */}

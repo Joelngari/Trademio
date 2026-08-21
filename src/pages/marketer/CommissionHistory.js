@@ -4,7 +4,7 @@ import { db } from '../../lib/firebase.js';
 import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { formatKSh } from '../../lib/currency.js';
 import SkeletonLoader from '../../components/SkeletonLoader.js';
-import { DollarSign, ArrowDownLeft, FileText, Calendar } from 'lucide-react';
+import { DollarSign, FileText, Calendar } from 'lucide-react';
 
 export default function CommissionHistory() {
   const { user } = useAuth();
@@ -33,6 +33,7 @@ export default function CommissionHistory() {
       loadCommissions();
     }
   }, [user?.uid]);
+
 
   if (loading) return <SkeletonLoader type="table" />;
 
@@ -80,10 +81,7 @@ export default function CommissionHistory() {
                       <span className="text-xs text-gray-400 font-bold uppercase tracking-tighter">{c.type || 'Deposit'}</span>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="text-green-500 font-bold">{formatKSh(c.commissionAmount)}</span>
-                        <span className="text-[10px] text-gray-600">From {formatKSh(c.depositAmount)} deposit</span>
-                      </div>
+                      <span className="text-green-500 font-bold">{formatKSh(c.commissionAmount)}</span>
                     </td>
                     <td className="px-6 py-4 font-normal text-gray-500">
                       <div className="flex items-center gap-2">
